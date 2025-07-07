@@ -17,15 +17,16 @@ const (
 	XListenerSetGroup = apixv1alpha1.GroupName
 
 	// Kind strings
-	ServiceKind          = "Service"
-	HTTPRouteKind        = "HTTPRoute"
-	TCPRouteKind         = "TCPRoute"
-	TLSRouteKind         = "TLSRoute"
-	GRPCRouteKind        = "GRPCRoute"
-	GatewayKind          = "Gateway"
-	GatewayClassKind     = "GatewayClass"
-	ReferenceGrantKind   = "ReferenceGrant"
-	BackendTLSPolicyKind = "BackendTLSPolicy"
+	ServiceKind               = "Service"
+	HTTPRouteKind             = "HTTPRoute"
+	TCPRouteKind              = "TCPRoute"
+	TLSRouteKind              = "TLSRoute"
+	GRPCRouteKind             = "GRPCRoute"
+	GatewayKind               = "Gateway"
+	GatewayClassKind          = "GatewayClass"
+	ReferenceGrantKind        = "ReferenceGrant"
+	BackendTLSPolicyKind      = "BackendTLSPolicy"
+	XBackendTrafficPolicyKind = "XBackendTrafficPolicy"
 
 	// Kind string for XListenerSet resource
 	XListenerSetKind = "XListenerSet"
@@ -74,6 +75,11 @@ var (
 		Version: apiv1alpha3.GroupVersion.Version,
 		Kind:    BackendTLSPolicyKind,
 	}
+	XBackendTrafficPolicyGVK = schema.GroupVersionKind{
+		Group:   "gateway.networking.x-k8s.io",
+		Version: "v1alpha1",
+		Kind:    XBackendTrafficPolicyKind,
+	}
 	InferencePoolGVK = schema.GroupVersionKind{
 		Group:   infextv1a2.GroupVersion.Group,
 		Version: infextv1a2.GroupVersion.Version,
@@ -84,6 +90,12 @@ var (
 		Group:    GatewayGroup,
 		Version:  apiv1alpha3.GroupVersion.Version,
 		Resource: "backendtlspolicies",
+	}
+
+	XBackendTrafficPolicyGVR = schema.GroupVersionResource{
+		Group:    "gateway.networking.x-k8s.io",
+		Version:  "v1alpha1",
+		Resource: "xbackendtrafficpolicies",
 	}
 
 	TCPRouteCRD = apiextv1.CustomResourceDefinition{

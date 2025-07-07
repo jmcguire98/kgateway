@@ -20,6 +20,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugins/serviceentry"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugins/trafficpolicy"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugins/waypoint"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugins/xbackendtrafficpolicy"
 	sdk "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 )
 
@@ -85,5 +86,6 @@ func Plugins(ctx context.Context, commoncol *common.CommonCollections, waypointG
 		waypoint.NewPlugin(ctx, commoncol, waypointGatewayClassName),
 		sandwich.NewPlugin(),
 		backendconfigpolicy.NewPlugin(ctx, commoncol),
+		xbackendtrafficpolicy.NewPlugin(ctx, commoncol),
 	}
 }
