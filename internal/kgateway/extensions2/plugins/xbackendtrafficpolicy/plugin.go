@@ -106,7 +106,6 @@ func registerTypes(ourCli versioned.Interface) {
 func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensionsplug.Plugin {
 	registerTypes(commoncol.OurClient)
 
-	// Create a collection that watches for XBackendTrafficPolicy resources
 	col := krt.WrapClient(kclient.NewFiltered[*gwxv1a1.XBackendTrafficPolicy](
 		commoncol.Client,
 		kclient.Filter{ObjectFilter: commoncol.Client.ObjectFilter()},

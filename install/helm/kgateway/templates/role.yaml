@@ -135,6 +135,7 @@ rules:
 - apiGroups:
   - gateway.networking.x-k8s.io
   resources:
+  - xbackendtrafficpolicies
   - xlistenersets
   verbs:
   - get
@@ -143,6 +144,7 @@ rules:
 - apiGroups:
   - gateway.networking.x-k8s.io
   resources:
+  - xbackendtrafficpolicies/status
   - xlistenersets/status
   verbs:
   - patch
