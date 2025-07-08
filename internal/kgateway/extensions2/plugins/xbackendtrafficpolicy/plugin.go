@@ -2,9 +2,11 @@ package xbackendtrafficpolicy
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
+	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	stateful_sessionv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/stateful_session/v3"
 	stateful_cookie "github.com/envoyproxy/go-control-plane/envoy/extensions/http/stateful_session/cookie/v3"
@@ -28,6 +30,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/plugins"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/reports"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -150,6 +153,7 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 				Name:                      "XBackendTrafficPolicy",
 				Policies:                  xBackendTrafficPolicyCol,
 				NewGatewayTranslationPass: newGatewayTranslationPass,
+				ProcessBackend:            processBackend,
 			},
 		},
 	}
@@ -235,10 +239,15 @@ func translateSessionPersistence(sessionPersistence *gwv1.SessionPersistence) (*
 
 type xBackendTrafficPolicyGwPass struct {
 	ir.UnimplementedProxyTranslationPass
+	needsStatefulSessionFilter map[string]bool
 }
 
+var _ ir.ProxyTranslationPass = &xBackendTrafficPolicyGwPass{}
+
 func newGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
-	return &xBackendTrafficPolicyGwPass{}
+	return &xBackendTrafficPolicyGwPass{
+		needsStatefulSessionFilter: make(map[string]bool),
+	}
 }
 
 func (p *xBackendTrafficPolicyGwPass) ApplyForRouteBackend(
@@ -252,7 +261,6 @@ func (p *xBackendTrafficPolicyGwPass) ApplyForRouteBackend(
 	}
 
 	if pol.sessionPersistence != nil {
-		// Convert StatefulSession to Any for route configuration
 		sessionPersistenceAny, err := utils.MessageToAny(pol.sessionPersistence)
 		if err != nil {
 			logger.Error("failed to convert session persistence to any",
@@ -261,13 +269,34 @@ func (p *xBackendTrafficPolicyGwPass) ApplyForRouteBackend(
 			return err
 		}
 
-		// Apply session persistence at route level using TypedFilterConfig
 		pCtx.TypedFilterConfig.AddTypedConfig(StatefulSessionFilterName, sessionPersistenceAny)
 
-		logger.Info("XBackendTrafficPolicy session persistence applied to route",
-			"backend", pCtx.Backend.GetName(),
-			"filter", StatefulSessionFilterName)
+		p.needsStatefulSessionFilter[pCtx.FilterChainName] = true
 	}
 
 	return nil
+}
+
+func (p *xBackendTrafficPolicyGwPass) HttpFilters(ctx context.Context, fcc ir.FilterChainCommon) ([]plugins.StagedHttpFilter, error) {
+	result := []plugins.StagedHttpFilter{}
+
+	var errs []error
+	if p.needsStatefulSessionFilter[fcc.FilterChainName] {
+		filter := plugins.MustNewStagedFilter(
+			StatefulSessionFilterName,
+			&stateful_sessionv3.StatefulSession{},
+			plugins.DuringStage(plugins.RouteStage),
+		)
+
+		result = append(result, filter)
+	}
+	return result, errors.Join(errs...)
+}
+
+// processBackend is a dummy function that marks this policy as a backend policy.
+// For XBackendTrafficPolicy, the actual processing happens at the HTTP filter level,
+// not at the cluster level.
+func processBackend(ctx context.Context, pol ir.PolicyIR, in ir.BackendObjectIR, out *clusterv3.Cluster) {
+	// Session persistence is handled at the HTTP filter level via HttpFilters and ApplyForRouteBackend
+	// This function exists only to mark that XBackendTrafficPolicy should be attached to backends
 }
