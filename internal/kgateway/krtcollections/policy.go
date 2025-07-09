@@ -1233,6 +1233,16 @@ func (h *RoutesIndex) getBackends(kctx krt.HandlerContext, src ir.ObjectSource, 
 		} else if err == nil {
 			err = &NotFoundError{NotFoundObj: to}
 		}
+		// xbackendtrafficpolicy is a special case,
+		// it can only be targeted at backends,
+		// but the config needs to propagate to the route backends.
+		xBackendTrafficPolicy, ok := backend.AttachedPolicies.Policies[wellknown.XBackendTrafficPolicyGVK.GroupKind()]
+		if ok {
+			logger.Info("xbackendtrafficpolicy found in backend attached policies", "backend", backend.GetName(), "namespace", backend.GetNamespace())
+			extensionRefs.Policies[wellknown.XBackendTrafficPolicyGVK.GroupKind()] = xBackendTrafficPolicy
+		} else {
+			logger.Info("xbackendtrafficpolicy not found in backend attached policies", "backend", backend.GetName(), "namespace", backend.GetNamespace())
+		}
 		backends = append(backends, ir.HttpBackendOrDelegate{
 			Backend: &ir.BackendRefIR{
 				BackendObject: backend,

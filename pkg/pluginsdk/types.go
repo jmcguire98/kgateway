@@ -105,7 +105,7 @@ type Plugin struct {
 	// ContributesRegistration is a lifecycle hook called after all collections are synced
 	// allowing Plugins to register handlers against collections, e.g. for status reporting
 	ContributesRegistration map[schema.GroupKind]func()
-	// extra has sync beyong primary resources in the collections above
+	// extra has sync beyond primary resources in the collections above
 	ExtraHasSynced func() bool
 }
 
