@@ -59,8 +59,9 @@ type (
 )
 
 type PolicyPlugin struct {
-	Name                      string
-	NewGatewayTranslationPass func(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass
+	Name                           string
+	NewEnvoyGatewayTranslationPass func(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.EnvoyTranslationPass
+	NewAgentGatewayPass            func() ir.AgentGatewayTranslationPass
 
 	ProcessBackend            ProcessBackend
 	PerClientProcessBackend   PerClientProcessBackend
@@ -132,8 +133,11 @@ func (p PolicyPlugin) AttachmentPoints() AttachmentPoints {
 	if p.ProcessBackend != nil {
 		ret = ret | BackendAttachmentPoint
 	}
-	if p.NewGatewayTranslationPass != nil {
+	if p.NewEnvoyGatewayTranslationPass != nil {
 		ret = ret | GatewayAttachmentPoint
+	}
+	if p.NewAgentGatewayPass != nil {
+		ret = ret | RouteAttachmentPoint
 	}
 	return ret
 }

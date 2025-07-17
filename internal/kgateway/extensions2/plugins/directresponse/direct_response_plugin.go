@@ -49,7 +49,7 @@ type directResponsePluginGwPass struct {
 	reporter reports.Reporter
 }
 
-var _ ir.ProxyTranslationPass = &directResponsePluginGwPass{}
+var _ ir.EnvoyTranslationPass = &directResponsePluginGwPass{}
 
 func registerTypes(ourCli versioned.Interface) {
 	skubeclient.Register[*v1alpha1.DirectResponse](
@@ -95,13 +95,13 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 				//	AttachmentPoints: []ir.AttachmentPoints{ir.HttpAttachmentPoint},
 				Policies: policyCol,
 				//				AttachmentPoints:          []ir.AttachmentPoints{ir.HttpAttachmentPoint},
-				NewGatewayTranslationPass: NewGatewayTranslationPass,
+				NewEnvoyGatewayTranslationPass: NewGatewayTranslationPass,
 			},
 		},
 	}
 }
 
-func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
+func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.EnvoyTranslationPass {
 	return &directResponsePluginGwPass{
 		reporter: reporter,
 	}

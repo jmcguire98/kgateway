@@ -37,7 +37,7 @@ func NewTrafficPolicyBuilder(
 	return trafficpolicy.NewTrafficPolicyBuilder(ctx, commoncol)
 }
 
-func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
+func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.EnvoyTranslationPass {
 	return trafficpolicy.NewGatewayTranslationPass(ctx, tctx, reporter)
 }
 

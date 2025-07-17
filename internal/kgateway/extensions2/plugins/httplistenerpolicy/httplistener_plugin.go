@@ -118,7 +118,7 @@ type httpListenerPolicyPluginGwPass struct {
 	reporter reports.Reporter
 }
 
-var _ ir.ProxyTranslationPass = &httpListenerPolicyPluginGwPass{}
+var _ ir.EnvoyTranslationPass = &httpListenerPolicyPluginGwPass{}
 
 func registerTypes(ourCli versioned.Interface) {
 	skubeclient.Register[*v1alpha1.HTTPListenerPolicy](
@@ -195,16 +195,16 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 		ContributesPolicies: map[schema.GroupKind]extensionsplug.PolicyPlugin{
 			wellknown.HTTPListenerPolicyGVK.GroupKind(): {
 				// AttachmentPoints: []ir.AttachmentPoints{ir.HttpAttachmentPoint},
-				NewGatewayTranslationPass: NewGatewayTranslationPass,
-				Policies:                  policyCol,
-				GetPolicyStatus:           getPolicyStatusFn(commoncol.CrudClient),
-				PatchPolicyStatus:         patchPolicyStatusFn(commoncol.CrudClient),
+				NewEnvoyGatewayTranslationPass: NewGatewayTranslationPass,
+				Policies:                       policyCol,
+				GetPolicyStatus:                getPolicyStatusFn(commoncol.CrudClient),
+				PatchPolicyStatus:              patchPolicyStatusFn(commoncol.CrudClient),
 			},
 		},
 	}
 }
 
-func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
+func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.EnvoyTranslationPass {
 	return &httpListenerPolicyPluginGwPass{
 		reporter: reporter,
 	}

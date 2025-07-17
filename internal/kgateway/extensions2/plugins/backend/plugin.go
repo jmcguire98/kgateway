@@ -123,8 +123,8 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 		},
 		ContributesPolicies: map[schema.GroupKind]extensionsplug.PolicyPlugin{
 			wellknown.BackendGVK.GroupKind(): {
-				Name:                      "backend",
-				NewGatewayTranslationPass: newPlug,
+				Name:                           "backend",
+				NewEnvoyGatewayTranslationPass: newPlug,
 			},
 		},
 		ContributesRegistration: map[schema.GroupKind]func(){
@@ -331,9 +331,9 @@ type backendPlugin struct {
 	needsDfpFilter   map[string]bool
 }
 
-var _ ir.ProxyTranslationPass = &backendPlugin{}
+var _ ir.EnvoyTranslationPass = &backendPlugin{}
 
-func newPlug(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
+func newPlug(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.EnvoyTranslationPass {
 	return &backendPlugin{}
 }
 

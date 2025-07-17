@@ -219,6 +219,7 @@ func NewControllerBuilder(ctx context.Context, cfg StartConfig) (*ControllerBuil
 			cfg.Client,
 			mgr,
 			commoncol,
+			mergedPlugins,
 			cfg.SetupOpts.Cache,
 			domainSuffix,
 			namespaces.GetPodNamespace(),

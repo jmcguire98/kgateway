@@ -206,13 +206,13 @@ func (t *Translator) runListenerPlugins(ctx context.Context, pass TranslationPas
 func (t *Translator) newPass(reporter reports.Reporter) TranslationPassPlugins {
 	ret := TranslationPassPlugins{}
 	for k, v := range t.ContributedPolicies {
-		if v.NewGatewayTranslationPass == nil {
+		if v.NewEnvoyGatewayTranslationPass == nil {
 			continue
 		}
-		tp := v.NewGatewayTranslationPass(context.TODO(), ir.GwTranslationCtx{}, reporter)
+		tp := v.NewEnvoyGatewayTranslationPass(context.TODO(), ir.GwTranslationCtx{}, reporter)
 		if tp != nil {
 			ret[k] = &TranslationPass{
-				ProxyTranslationPass: tp,
+				EnvoyTranslationPass: tp,
 				Name:                 v.Name,
 				MergePolicies:        v.MergePolicies,
 			}
@@ -222,7 +222,7 @@ func (t *Translator) newPass(reporter reports.Reporter) TranslationPassPlugins {
 }
 
 type TranslationPass struct {
-	ir.ProxyTranslationPass
+	ir.EnvoyTranslationPass
 	Name string
 	// If the plugin supports policy merging, it must implement MergePolicies
 	// such that policies ordered from high to low priority, both hierarchically

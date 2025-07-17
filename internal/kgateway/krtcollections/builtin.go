@@ -129,7 +129,7 @@ func NewBuiltinPlugin(ctx context.Context) extensionsplug.Plugin {
 		ContributesPolicies: map[schema.GroupKind]extensionsplug.PolicyPlugin{
 			pluginsdkir.VirtualBuiltInGK: {
 				// AttachmentPoints: []ir.AttachmentPoints{ir.HttpAttachmentPoint},
-				NewGatewayTranslationPass: NewGatewayTranslationPass,
+				NewEnvoyGatewayTranslationPass: NewGatewayTranslationPass,
 			},
 		},
 	}
@@ -534,7 +534,7 @@ func toEnvoyPercentage(percentage float64) *envoytype.FractionalPercent {
 	}
 }
 
-func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
+func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.EnvoyTranslationPass {
 	return &builtinPluginGwPass{
 		reporter:            reporter,
 		hasCorsPolicy:       make(map[string]bool),

@@ -176,7 +176,7 @@ type trafficPolicyPluginGwPass struct {
 	bufferInChain         map[string]*bufferv3.Buffer
 }
 
-var _ ir.ProxyTranslationPass = &trafficPolicyPluginGwPass{}
+var _ ir.EnvoyTranslationPass = &trafficPolicyPluginGwPass{}
 
 var useRustformations bool
 
@@ -230,18 +230,18 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 		ContributesPolicies: map[schema.GroupKind]extensionsplug.PolicyPlugin{
 			wellknown.TrafficPolicyGVK.GroupKind(): {
 				// AttachmentPoints: []ir.AttachmentPoints{ir.HttpAttachmentPoint},
-				NewGatewayTranslationPass: NewGatewayTranslationPass,
-				Policies:                  policyCol,
-				MergePolicies:             mergePolicies,
-				GetPolicyStatus:           getPolicyStatusFn(commoncol.CrudClient),
-				PatchPolicyStatus:         patchPolicyStatusFn(commoncol.CrudClient),
+				NewEnvoyGatewayTranslationPass: NewGatewayTranslationPass,
+				Policies:                       policyCol,
+				MergePolicies:                  mergePolicies,
+				GetPolicyStatus:                getPolicyStatusFn(commoncol.CrudClient),
+				PatchPolicyStatus:              patchPolicyStatusFn(commoncol.CrudClient),
 			},
 		},
 		ExtraHasSynced: translator.HasSynced,
 	}
 }
 
-func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
+func NewGatewayTranslationPass(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.EnvoyTranslationPass {
 	return &trafficPolicyPluginGwPass{
 		reporter:                 reporter,
 		setTransformationInChain: make(map[string]bool),

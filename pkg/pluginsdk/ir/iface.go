@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/agentgateway/agentgateway/go/api"
 	envoy_config_cluster_v3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	envoy_config_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_config_listener_v3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
@@ -78,10 +79,10 @@ type HcmContext struct {
 	Policy PolicyIR
 }
 
-// ProxyTranslationPass represents a single translation pass for a gateway. It can hold state
+// EnvoyTranslationPass represents a single translation pass for a gateway using envoy. It can hold state
 // for the duration of the translation.
 // Each of the functions here will be called in the order they appear in the interface.
-type ProxyTranslationPass interface {
+type EnvoyTranslationPass interface {
 	//	Name() string
 	// called 1 time for each listener
 	ApplyListenerPlugin(
@@ -145,9 +146,13 @@ type ProxyTranslationPass interface {
 	ResourcesToAdd(ctx context.Context) Resources
 }
 
+type AgentGatewayTranslationPass interface {
+	ApplyForRoute(ctx context.Context, pCtx *RouteContext, out *api.Route) error
+}
+
 type UnimplementedProxyTranslationPass struct{}
 
-var _ ProxyTranslationPass = UnimplementedProxyTranslationPass{}
+var _ EnvoyTranslationPass = UnimplementedProxyTranslationPass{}
 
 func (s UnimplementedProxyTranslationPass) ApplyListenerPlugin(ctx context.Context, pCtx *ListenerContext, out *envoy_config_listener_v3.Listener) {
 }
@@ -244,7 +249,7 @@ var ErrNotAttachable = fmt.Errorf("policy is not attachable to this object")
 
 type PolicyRun interface {
 	// Allocate state for single listener+rotue translation pass.
-	NewGatewayTranslationPass(ctx context.Context, tctx GwTranslationCtx, reporter reports.Reporter) ProxyTranslationPass
+	NewGatewayTranslationPass(ctx context.Context, tctx GwTranslationCtx, reporter reports.Reporter) EnvoyTranslationPass
 	// Process cluster for a backend
 	ProcessBackend(ctx context.Context, in BackendObjectIR, out *envoy_config_cluster_v3.Cluster) error
 }

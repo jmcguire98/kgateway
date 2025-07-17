@@ -1,7 +1,6 @@
 package agentgatewaysyncer
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -35,17 +34,11 @@ import (
 	gwv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gwv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/plugin"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/plugins/timeout"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
 )
-
-var pluginRegistry = plugin.Registry{
-	timeout.VirtualGVK.GroupKind(): timeout.NewPlugin(),
-}
 
 const (
 	gatewayTLSTerminateModeKey = "gateway.agentgateway.io/tls-terminate-mode"
@@ -91,27 +84,7 @@ func convertHTTPRouteToADP(ctx RouteContext, r gwv1.HTTPRouteRule,
 	}
 	res.Filters = filters
 
-	pctx := &plugin.RouteContext{Rule: &r}
-	var policiesToRun []schema.GroupKind
-	if r.Timeouts != nil {
-		policiesToRun = append(policiesToRun, timeout.VirtualGVK.GroupKind())
-	}
-
-	for _, gk := range policiesToRun {
-		plugin, ok := pluginRegistry[gk]
-		if !ok {
-			continue
-		}
-		pass := plugin.NewPass()
-		if err := pass.ApplyForRoute(context.Background(), pctx, res); err != nil {
-			return nil, &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionAccepted,
-				Status:  metav1.ConditionFalse,
-				Reason:  "PluginError",
-				Message: fmt.Sprintf("failed to apply plugin: %v", err),
-			}
-		}
-	}
+	// RUN PLUGINS HERE
 
 	// Retry: todo
 	route, backendErr, err := buildADPHTTPDestination(ctx, r.BackendRefs, obj.Namespace)

@@ -28,7 +28,8 @@ type (
 	ObjectSource                      = ir.ObjectSource
 	PolicyIR                          = ir.PolicyIR
 	PolicyWrapper                     = ir.PolicyWrapper
-	ProxyTranslationPass              = ir.ProxyTranslationPass
+	EnvoyTranslationPass              = ir.EnvoyTranslationPass
+	AgentGatewayTranslationPass       = ir.AgentGatewayTranslationPass
 	UnimplementedProxyTranslationPass = ir.UnimplementedProxyTranslationPass
 
 	Gateway             = ir.Gateway

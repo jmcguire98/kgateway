@@ -53,7 +53,7 @@ func NewPlugin() extensionsplug.Plugin {
 		ContributesPolicies: extensionsplug.ContributesPolicies{
 			SandwichedInboundGK: extensionsplug.PolicyPlugin{
 				Name: "sandwich",
-				NewGatewayTranslationPass: func(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
+				NewEnvoyGatewayTranslationPass: func(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.EnvoyTranslationPass {
 					// TODO we could read the waypoint-inbound-binding annotation here and set isSandwiched = true
 					// instead of using a policy set by translator?
 					return &sandwichedTranslationPass{
@@ -97,7 +97,7 @@ type sandwichedTranslationPass struct {
 	isSandwiched bool
 }
 
-var _ ir.ProxyTranslationPass = &sandwichedTranslationPass{}
+var _ ir.EnvoyTranslationPass = &sandwichedTranslationPass{}
 
 // ApplyListenerPlugin adds a ProxyProtocol ListenerFilter that
 // 1. Overrides source and destination addresses to be what the zTunnel saw.
