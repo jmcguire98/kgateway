@@ -90,7 +90,7 @@ func TestFilterChains(t *testing.T) {
 	envoyListener, _ := translator.ComputeListener(
 		ctx,
 		irtranslator.TranslationPassPlugins{
-			addFiltersGK: &irtranslator.TranslationPass{ProxyTranslationPass: addFilters{}},
+			addFiltersGK: &irtranslator.TranslationPass{EnvoyTranslationPass: addFilters{}},
 		},
 		gateway,
 		listener,
