@@ -9,10 +9,11 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/reports"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func NewBuiltinPlugin() pluginsdk.Plugin {
