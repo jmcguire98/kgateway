@@ -2,33 +2,57 @@ package builtin
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/agentgateway/agentgateway/go/api"
-	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 	"google.golang.org/protobuf/types/known/durationpb"
+	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/reports"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// Pass handles the translation of built-in Gateway API fields for AgentGateway.
+func NewBuiltinPlugin() pluginsdk.Plugin {
+	return pluginsdk.Plugin{
+		ContributesPolicies: map[schema.GroupKind]pluginsdk.PolicyPlugin{
+			ir.VirtualBuiltInGK: {
+				NewAgentGatewayPass: func(reporter reports.Reporter) ir.AgentGatewayTranslationPass {
+					return NewPass()
+				},
+			},
+		},
+	}
+}
+
+// Pass implements the ir.AgentGatewayTranslationPass interface.
 type Pass struct{}
 
-var _ pluginsdk.AgentGatewayPass = &Pass{}
-
-// NewPass creates a new instance of the builtin pass for AgentGateway.
-func NewPass() pluginsdk.AgentGatewayPass {
+// NewPass creates a new Pass.
+func NewPass() *Pass {
 	return &Pass{}
 }
 
-func (p *Pass) ApplyForRoute(ctx context.Context, pctx *pluginsdk.AgentGatewayRouteContext, route *api.Route) error {
-	// 1. Handle Timeouts
-	if pctx.Rule.Timeouts != nil && pctx.Rule.Timeouts.Request != nil {
-		if d, err := time.ParseDuration(string(*pctx.Rule.Timeouts.Request)); err == nil {
-			if route.TrafficPolicy == nil {
-				route.TrafficPolicy = &api.TrafficPolicy{}
-			}
-			route.TrafficPolicy.RequestTimeout = durationpb.New(d)
+// ApplyForRoute applies the builtin transformations for the given route.
+func (p *Pass) ApplyForRoute(ctx context.Context, pctx *ir.AgentGatewayRouteContext, route *api.Route) error {
+	err := applyTimeouts(pctx.Rule, route)
+	return err
+}
+
+func applyTimeouts(rule *gwv1.HTTPRouteRule, route *api.Route) error {
+	if rule.Timeouts != nil {
+		if parsed, err := time.ParseDuration(string(*rule.Timeouts.Request)); err == nil {
+			route.TrafficPolicy.RequestTimeout = durationpb.New(parsed)
+		} else {
+			return fmt.Errorf("failed to parse request timeout: %v", err)
+		}
+		if parsed, err := time.ParseDuration(string(*rule.Timeouts.BackendRequest)); err == nil {
+			route.TrafficPolicy.BackendRequestTimeout = durationpb.New(parsed)
+		} else {
+			return fmt.Errorf("failed to parse backend request timeout: %v", err)
 		}
 	}
-
 	return nil
 }

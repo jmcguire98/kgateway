@@ -146,8 +146,12 @@ type EnvoyTranslationPass interface {
 	ResourcesToAdd(ctx context.Context) Resources
 }
 
+type AgentGatewayRouteContext struct {
+	Rule *gwv1.HTTPRouteRule
+}
+
 type AgentGatewayTranslationPass interface {
-	ApplyForRoute(ctx context.Context, pCtx *RouteContext, out *api.Route) error
+	ApplyForRoute(ctx context.Context, pCtx *AgentGatewayRouteContext, out *api.Route) error
 }
 
 type UnimplementedProxyTranslationPass struct{}

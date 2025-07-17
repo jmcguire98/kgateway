@@ -20,6 +20,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/reports"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 )
 
 var (
@@ -657,7 +658,7 @@ func TestADPRouteCollection(t *testing.T) {
 			// Call ADPRouteCollection
 			rm := reports.NewReportMap()
 			rep := reports.NewReporter(&rm)
-			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, rm, rep)
+			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, rm, rep, pluginsdk.Plugin{})
 
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())
@@ -1253,7 +1254,7 @@ func TestADPRouteCollectionGRPC(t *testing.T) {
 			// Call ADPRouteCollection
 			rm := reports.NewReportMap()
 			rep := reports.NewReporter(&rm)
-			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, rm, rep)
+			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, rm, rep, pluginsdk.Plugin{})
 
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())
@@ -1547,7 +1548,7 @@ func TestADPRouteCollectionWithFilters(t *testing.T) {
 			// Call ADPRouteCollection
 			rm := reports.NewReportMap()
 			rep := reports.NewReporter(&rm)
-			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, rm, rep)
+			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, rm, rep, pluginsdk.Plugin{})
 
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())

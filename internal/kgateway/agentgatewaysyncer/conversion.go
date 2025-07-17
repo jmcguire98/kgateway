@@ -1,6 +1,7 @@
 package agentgatewaysyncer
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -84,7 +85,20 @@ func convertHTTPRouteToADP(ctx RouteContext, r gwv1.HTTPRouteRule,
 	}
 	res.Filters = filters
 
-	// RUN PLUGINS HERE
+	agentGatewayRouteContext := ir.AgentGatewayRouteContext{
+		Rule: &r,
+	}
+
+	for _, pass := range ctx.pluginPasses {
+		if err := pass.ApplyForRoute(context.Background(), &agentGatewayRouteContext, res); err != nil {
+			return nil, &reporter.RouteCondition{
+				Type:    gwv1.RouteConditionAccepted,
+				Status:  metav1.ConditionFalse,
+				Reason:  "PluginError",
+				Message: "failed to apply plugin",
+			}
+		}
+	}
 
 	// Retry: todo
 	route, backendErr, err := buildADPHTTPDestination(ctx, r.BackendRefs, obj.Namespace)

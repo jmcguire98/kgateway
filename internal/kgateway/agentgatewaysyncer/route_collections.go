@@ -16,11 +16,13 @@ import (
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/reports"
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
 )
 
@@ -34,11 +36,13 @@ func ADPRouteCollection(
 	krtopts krtutil.KrtOptions,
 	rm reports.ReportMap,
 	rep reporter.Reporter,
+	plugins pluginsdk.Plugin,
 ) krt.Collection[ADPResource] {
 	httpRoutes := krt.NewManyCollection(httpRouteCol, func(krtctx krt.HandlerContext, obj *gwv1.HTTPRoute) []ADPResource {
 		logger.Debug("translating HTTPRoute", "route_name", obj.GetName(), "resource_version", obj.GetResourceVersion())
 
 		ctx := inputs.WithCtx(krtctx)
+		ctx.pluginPasses = newAgentGatewayPasses(plugins, rep)
 		routeReporter := rep.Route(obj)
 		route := obj.Spec
 		parentRefs, gwResult := computeRoute(ctx, obj, func(obj *gwv1.HTTPRoute) iter.Seq2[ADPRoute, *reporter.RouteCondition] {
@@ -251,6 +255,19 @@ func IsNil[O comparable](o O) bool {
 	return o == t
 }
 
+func newAgentGatewayPasses(plugins pluginsdk.Plugin, reporter reporter.Reporter) []ir.AgentGatewayTranslationPass {
+	var passes []ir.AgentGatewayTranslationPass
+	if plugins.ContributesPolicies == nil {
+		return nil
+	}
+	for _, p := range plugins.ContributesPolicies {
+		if p.NewAgentGatewayPass != nil {
+			passes = append(passes, p.NewAgentGatewayPass(reporter))
+		}
+	}
+	return passes
+}
+
 // computeRoute holds the common route building logic shared amongst all types
 func computeRoute[T controllers.Object, O comparable](ctx RouteContext, obj T, translator func(
 	obj T,
@@ -285,6 +302,7 @@ func computeRoute[T controllers.Object, O comparable](ctx RouteContext, obj T, t
 type RouteContext struct {
 	Krt krt.HandlerContext
 	RouteContextInputs
+	pluginPasses []ir.AgentGatewayTranslationPass
 }
 
 type RouteContextInputs struct {
