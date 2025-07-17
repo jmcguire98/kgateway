@@ -43,15 +43,22 @@ func (p *Pass) ApplyForRoute(ctx context.Context, pctx *ir.AgentGatewayRouteCont
 
 func applyTimeouts(rule *gwv1.HTTPRouteRule, route *api.Route) error {
 	if rule.Timeouts != nil {
-		if parsed, err := time.ParseDuration(string(*rule.Timeouts.Request)); err == nil {
-			route.TrafficPolicy.RequestTimeout = durationpb.New(parsed)
-		} else {
-			return fmt.Errorf("failed to parse request timeout: %v", err)
+		if route.TrafficPolicy == nil {
+			route.TrafficPolicy = &api.TrafficPolicy{}
 		}
-		if parsed, err := time.ParseDuration(string(*rule.Timeouts.BackendRequest)); err == nil {
-			route.TrafficPolicy.BackendRequestTimeout = durationpb.New(parsed)
-		} else {
-			return fmt.Errorf("failed to parse backend request timeout: %v", err)
+		if rule.Timeouts.Request != nil {
+			if parsed, err := time.ParseDuration(string(*rule.Timeouts.Request)); err == nil {
+				route.TrafficPolicy.RequestTimeout = durationpb.New(parsed)
+			} else {
+				return fmt.Errorf("failed to parse request timeout: %v", err)
+			}
+		}
+		if rule.Timeouts.BackendRequest != nil {
+			if parsed, err := time.ParseDuration(string(*rule.Timeouts.BackendRequest)); err == nil {
+				route.TrafficPolicy.BackendRequestTimeout = durationpb.New(parsed)
+			} else {
+				return fmt.Errorf("failed to parse backend request timeout: %v", err)
+			}
 		}
 	}
 	return nil
