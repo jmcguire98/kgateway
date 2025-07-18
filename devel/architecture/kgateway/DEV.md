@@ -146,7 +146,7 @@ state that tells us to add an http filter.
 
 When it translates Gateway API route rules to envoy routes, it reads the
 `AttachedPolicies` and calls the appropriate function in the
-`ProxyTranslationPass` and passes in the attached policy IR. This lets the
+`EnvoyTranslationPass` and passes in the attached policy IR. This lets the
 policy plugin code modify the route or listener as needed, based on the policy
 IR (add filters, add filter route config, etc..). Then policy plugins are
 invoked with the attached policy IR, and can modify the envoy protobufs as
