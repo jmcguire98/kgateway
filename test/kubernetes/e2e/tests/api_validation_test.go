@@ -42,7 +42,7 @@ spec:
     - host: example.com
       port: 80
 `,
-			wantError: "exactly one of the fields in [ai aws static dynamicForwardProxy] must be set",
+			wantError: "exactly one of the fields in [ai aws static dynamicForwardProxy mcp] must be set",
 		},
 		{
 			name: "BackendConfigPolicy: enforce AtMostOneOf for HTTP protocol options",
