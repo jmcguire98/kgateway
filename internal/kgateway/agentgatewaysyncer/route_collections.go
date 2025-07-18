@@ -293,7 +293,7 @@ func computeRoute[T controllers.Object, O comparable](ctx RouteContext, obj T, t
 		res := conversionResult[O]{}
 		for vs, err := range translator(obj) {
 			// This was a hard error
-			if IsNil(vs) {
+			if err != nil && IsNil(vs) {
 				res.error = err
 				return conversionResult[O]{error: err}
 			}
