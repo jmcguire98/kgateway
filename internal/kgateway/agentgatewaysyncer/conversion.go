@@ -1,7 +1,6 @@
 package agentgatewaysyncer
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -90,7 +89,7 @@ func convertHTTPRouteToADP(ctx RouteContext, r gwv1.HTTPRouteRule,
 	}
 
 	for _, pass := range ctx.pluginPasses {
-		if err := pass.ApplyForRoute(context.Background(), &agentGatewayRouteContext, res); err != nil {
+		if err := pass.ApplyForRoute(&agentGatewayRouteContext, res); err != nil {
 			return nil, &reporter.RouteCondition{
 				Type:    gwv1.RouteConditionAccepted,
 				Status:  metav1.ConditionFalse,

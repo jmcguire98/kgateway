@@ -151,7 +151,7 @@ type AgentGatewayRouteContext struct {
 }
 
 type AgentGatewayTranslationPass interface {
-	ApplyForRoute(ctx context.Context, pCtx *AgentGatewayRouteContext, out *api.Route) error
+	ApplyForRoute(pCtx *AgentGatewayRouteContext, out *api.Route) error
 }
 
 type UnimplementedProxyTranslationPass struct{}

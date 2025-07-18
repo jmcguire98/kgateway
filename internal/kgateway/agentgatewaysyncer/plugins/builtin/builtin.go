@@ -1,7 +1,6 @@
 package builtin
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -37,7 +36,7 @@ func NewPass() *Pass {
 }
 
 // ApplyForRoute applies the builtin transformations for the given route.
-func (p *Pass) ApplyForRoute(ctx context.Context, pctx *ir.AgentGatewayRouteContext, route *api.Route) error {
+func (p *Pass) ApplyForRoute(pctx *ir.AgentGatewayRouteContext, route *api.Route) error {
 	err := applyTimeouts(pctx.Rule, route)
 	return err
 }
