@@ -262,7 +262,6 @@ func IsNil[O comparable](o O) bool {
 func newAgentGatewayPasses(plugs pluginsdk.Plugin,
 	rep reporter.Reporter,
 	aps ir.AttachedPolicies) []ir.AgentGatewayTranslationPass {
-
 	var out []ir.AgentGatewayTranslationPass
 	if len(aps.Policies) == 0 {
 		return out
