@@ -94,7 +94,7 @@ func convertHTTPRouteToADP(ctx RouteContext, r gwv1.HTTPRouteRule,
 				Type:    gwv1.RouteConditionAccepted,
 				Status:  metav1.ConditionFalse,
 				Reason:  "PluginError",
-				Message: "failed to apply plugin",
+				Message: fmt.Sprintf("failed to apply a plugin: %v", err),
 			}
 		}
 	}
