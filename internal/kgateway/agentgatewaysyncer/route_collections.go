@@ -373,7 +373,6 @@ func buildGatewayRoutes[T any](parentRefs []routeParentReference, convertRules f
 	return convertRules()
 }
 
-
 // attachRoutePolicies populates ctx.AttachedPolicies with policies that
 // target the given HTTPRoute. It uses the exported LookupTargetingPolicies
 // from PolicyIndex.

@@ -662,7 +662,6 @@ func TestADPRouteCollection(t *testing.T) {
 			rep := reports.NewReporter(&rm)
 			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, gateways, gatewayObjs, routeInputs, krtopts, rm, rep, pluginsdk.Plugin{})
 
-
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())
 
