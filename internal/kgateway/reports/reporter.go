@@ -81,24 +81,15 @@ func key(obj metav1.Object) types.NamespacedName {
 //
 // NOTE: Exported for unit testing, validation_test.go should be refactored to reduce this visibility
 func (r *ReportMap) Gateway(gateway *gwv1.Gateway) *GatewayReport {
-	fmt.Printf("debug(npolshak) Gateway() %s\n", gateway.Name)
 	key := key(gateway)
-	if r.Gateways[key] == nil {
-		fmt.Printf("debug(npolshak) nil gateway report %v\n", r.Gateways[key])
-	} else {
-		fmt.Printf("debug(npolshak) val gateway report not nil %v\n", r.Gateways[key].conditions)
-	}
 	return r.Gateways[key]
 }
 
 func (r *ReportMap) newGatewayReport(gateway *gwv1.Gateway) *GatewayReport {
-	fmt.Printf("debug(npolshak) creating new gateway report %s\n", gateway.Name)
-
 	gr := &GatewayReport{}
 	gr.observedGeneration = gateway.Generation
 	key := key(gateway)
 	r.Gateways[key] = gr
-	fmt.Printf("debug(npolshak) newGatewayReport val gateway report %v\n", gr.conditions)
 	return gr
 }
 
@@ -208,7 +199,6 @@ func (g *GatewayReport) SetCondition(gc pluginsdkreporter.GatewayCondition) {
 		Reason:  string(gc.Reason),
 		Message: gc.Message,
 	}
-	fmt.Printf("debug(npolshak) SetCondition %v for %v\n", condition, g)
 	meta.SetStatusCondition(&g.conditions, condition)
 }
 
@@ -256,6 +246,7 @@ func (g *ListenerSetReport) SetCondition(gc pluginsdkreporter.GatewayCondition) 
 func NewListenerReport(name string) *ListenerReport {
 	lr := ListenerReport{}
 	lr.Status.Name = gwv1.SectionName(name)
+	lr.Status.SupportedKinds = []gwv1.RouteGroupKind{} // Initialize with empty slice
 	return &lr
 }
 
@@ -282,11 +273,11 @@ type reporter struct {
 }
 
 func (r *reporter) Gateway(gateway *gwv1.Gateway) pluginsdkreporter.GatewayReporter {
-	fmt.Printf("debug(npolshak) reporter Gateway(gateway) %s\n", gateway.Name)
 	gr := r.report.Gateway(gateway)
 	if gr == nil {
 		gr = r.report.newGatewayReport(gateway)
 	}
+	gr.observedGeneration = gateway.Generation
 	return gr
 }
 
@@ -295,6 +286,7 @@ func (r *reporter) ListenerSet(listenerSet *gwxv1alpha1.XListenerSet) pluginsdkr
 	if lsr == nil {
 		lsr = r.report.newListenerSetReport(listenerSet)
 	}
+	lsr.observedGeneration = listenerSet.Generation
 	return lsr
 }
 

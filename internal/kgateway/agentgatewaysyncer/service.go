@@ -141,7 +141,19 @@ func (a *index) inferencePoolBuilder(
 //}
 
 func toAppProtocolFromKube(p corev1.ServicePort) api.AppProtocol {
-	return toAppProtocolFromProtocol(string(kubeutil.ConvertProtocol(p.Port, p.Name, p.Protocol, p.AppProtocol)))
+	return toAppProtocolFromProtocol(kubeutil.ConvertProtocol(p.Port, p.Name, p.Protocol, p.AppProtocol))
+}
+
+func toAppProtocolFromProtocol(p protocol.Instance) api.AppProtocol {
+	switch p {
+	case protocol.HTTP:
+		return api.AppProtocol_HTTP11
+	case protocol.HTTP2:
+		return api.AppProtocol_HTTP2
+	case protocol.GRPC:
+		return api.AppProtocol_GRPC
+	}
+	return api.AppProtocol_UNKNOWN
 }
 
 func (a *index) constructService(ctx krt.HandlerContext, svc *corev1.Service) *api.Service {

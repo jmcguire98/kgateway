@@ -112,8 +112,8 @@ func (g ADPResource) ResourceName() string {
 }
 
 func (g ADPResource) Equals(other ADPResource) bool {
-	return proto.Equal(g.Resource, other.Resource) && g.Gateway == other.Gateway &&
-		report{g.reports}.Equals(report{other.reports})
+	// Don't compare reports, as they are not part of the ADPResource equality and synced separately
+	return proto.Equal(g.Resource, other.Resource) && g.Gateway == other.Gateway
 }
 
 // Meta is metadata attached to each configuration unit.

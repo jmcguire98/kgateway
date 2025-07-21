@@ -8,6 +8,7 @@ import (
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/kube/controllers"
 	"istio.io/istio/pkg/kube/krt"
+	"istio.io/istio/pkg/ptr"
 	"istio.io/istio/pkg/slices"
 	"istio.io/istio/pkg/util/protomarshal"
 	corev1 "k8s.io/api/core/v1"
@@ -19,9 +20,7 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
-
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/reports"
-
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
@@ -35,12 +34,15 @@ func ADPRouteCollection(
 	grpcRouteCol krt.Collection[*gwv1.GRPCRoute],
 	tcpRouteCol krt.Collection[*gwv1alpha2.TCPRoute],
 	tlsRouteCol krt.Collection[*gwv1alpha2.TLSRoute],
+	gateways krt.Collection[Gateway],
+	gatewayObjs krt.Collection[*gwv1.Gateway],
 	inputs RouteContextInputs,
 	krtopts krtutil.KrtOptions,
 	rm reports.ReportMap,
 	rep reporter.Reporter,
 	plugins pluginsdk.Plugin,
 ) krt.Collection[ADPResource] {
+	httpRouteAttachments := gatewayRouteAttachmentCountCollection(inputs, httpRouteCol, wellknown.HTTPRouteGVK, krtopts)
 	httpRoutes := krt.NewManyCollection(httpRouteCol, func(krtctx krt.HandlerContext, obj *gwv1.HTTPRoute) []ADPResource {
 		logger.Debug("translating HTTPRoute", "route_name", obj.GetName(), "resource_version", obj.GetResourceVersion())
 
@@ -100,6 +102,7 @@ func ADPRouteCollection(
 		return res
 	}, krtopts.ToOptions("ADPHTTPRoutes")...)
 
+	grpcRouteAttachments := gatewayRouteAttachmentCountCollection(inputs, grpcRouteCol, wellknown.GRPCRouteGVK, krtopts)
 	grpcRoutes := krt.NewManyCollection(grpcRouteCol, func(krtctx krt.HandlerContext, obj *gwv1.GRPCRoute) []ADPResource {
 		logger.Debug("translating GRPCRoute", "route_name", obj.GetName(), "resource_version", obj.GetResourceVersion())
 
@@ -148,6 +151,7 @@ func ADPRouteCollection(
 		return res
 	}, krtopts.ToOptions("ADPGRPCRoutes")...)
 
+	tcpRouteAttachments := gatewayRouteAttachmentCountCollection(inputs, tcpRouteCol, wellknown.TCPRouteGVK, krtopts)
 	tcpRoutes := krt.NewManyCollection(tcpRouteCol, func(krtctx krt.HandlerContext, obj *gwv1alpha2.TCPRoute) []ADPResource {
 		logger.Debug("translating TCPRoute", "route_name", obj.GetName(), "resource_version", obj.GetResourceVersion())
 
@@ -196,6 +200,7 @@ func ADPRouteCollection(
 		return res
 	}, krtopts.ToOptions("ADPTCPRoutes")...)
 
+	tlsRouteAttachments := gatewayRouteAttachmentCountCollection(inputs, tlsRouteCol, wellknown.TLSRouteGVK, krtopts)
 	tlsRoutes := krt.NewManyCollection(tlsRouteCol, func(krtctx krt.HandlerContext, obj *gwv1alpha2.TLSRoute) []ADPResource {
 		logger.Debug("translating TLSRoute", "route_name", obj.GetName(), "resource_version", obj.GetResourceVersion())
 
@@ -245,6 +250,18 @@ func ADPRouteCollection(
 	}, krtopts.ToOptions("ADPTLSRoutes")...)
 
 	routes := krt.JoinCollection([]krt.Collection[ADPResource]{httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes}, krtopts.ToOptions("ADPRoutes")...)
+
+	routeAttachments := krt.JoinCollection([]krt.Collection[*RouteAttachment]{
+		httpRouteAttachments,
+		grpcRouteAttachments,
+		tcpRouteAttachments,
+		tlsRouteAttachments,
+	}, krtopts.ToOptions("RouteAttachments")...)
+	routeAttachmentsIndex := krt.NewIndex(routeAttachments, func(o *RouteAttachment) []types.NamespacedName {
+		return []types.NamespacedName{o.To}
+	})
+	FinalGatewayStatusCollectionAttachedRoutes(gatewayObjs, routeAttachments, routeAttachmentsIndex, krtopts, rep)
+
 	return routes
 }
 
@@ -356,6 +373,7 @@ func buildGatewayRoutes[T any](parentRefs []routeParentReference, convertRules f
 	return convertRules()
 }
 
+
 // attachRoutePolicies populates ctx.AttachedPolicies with policies that
 // target the given HTTPRoute. It uses the exported LookupTargetingPolicies
 // from PolicyIndex.
@@ -391,4 +409,94 @@ func attachRoutePolicies(ctx *RouteContext, route *gwv1.HTTPRoute) {
 		aps.Policies[pluginsdkir.VirtualBuiltInGK] = nil
 	}
 	ctx.AttachedPolicies = aps
+}
+
+type RouteAttachment struct {
+	From TypedResource
+	// To is assumed to be a Gateway
+	To           types.NamespacedName
+	ListenerName string
+}
+
+func (r *RouteAttachment) ResourceName() string {
+	return r.From.Kind.String() + "/" + r.From.Name.String() + "/" + r.To.String() + "/" + r.ListenerName
+}
+
+func (r *RouteAttachment) Equals(other RouteAttachment) bool {
+	return r.From == other.From && r.To == other.To && r.ListenerName == other.ListenerName
+}
+
+// gatewayRouteAttachmentCountCollection holds the generic logic to determine the parents a route is attached to, used for
+// computing the aggregated `attachedRoutes` status in Gateway.
+func gatewayRouteAttachmentCountCollection[T controllers.Object](
+	inputs RouteContextInputs,
+	col krt.Collection[T],
+	kind schema.GroupVersionKind,
+	krtopts krtutil.KrtOptions,
+) krt.Collection[*RouteAttachment] {
+	return krt.NewManyCollection(col, func(krtctx krt.HandlerContext, obj T) []*RouteAttachment {
+		ctx := inputs.WithCtx(krtctx)
+		from := TypedResource{
+			Kind: kind,
+			Name: config.NamespacedName(obj),
+		}
+
+		parentRefs := extractParentReferenceInfo(ctx, inputs.RouteParents, obj)
+		return slices.MapFilter(filteredReferences(parentRefs), func(e routeParentReference) **RouteAttachment {
+			if e.ParentKey.Kind != wellknown.GatewayGVK {
+				return nil
+			}
+			return ptr.Of(&RouteAttachment{
+				From: from,
+				To: types.NamespacedName{
+					Name:      e.ParentKey.Name,
+					Namespace: e.ParentKey.Namespace,
+				},
+				ListenerName: string(e.ParentSection),
+			})
+		})
+	}, krtopts.ToOptions(kind.Kind+"/count")...)
+}
+
+// gatewayStatusUpdate is a simple wrapper type for Gateway status updates that implements ResourceNamer
+type gatewayStatusUpdate struct {
+	gateway *gwv1.Gateway
+}
+
+// ResourceName implements krt.ResourceNamer interface
+func (g gatewayStatusUpdate) ResourceName() string {
+	return g.gateway.Namespace + "/" + g.gateway.Name
+}
+
+// Equals implements krt.Equaler interface
+func (g gatewayStatusUpdate) Equals(other gatewayStatusUpdate) bool {
+	return g.gateway.Namespace == other.gateway.Namespace &&
+		g.gateway.Name == other.gateway.Name &&
+		g.gateway.ResourceVersion == other.gateway.ResourceVersion
+}
+
+// FinalGatewayStatusCollectionAttachedRoutes finalizes a Gateway status. There is a circular logic between Gateways and Routes to determine
+// the attachedRoute count, so we first build a partial Gateway status, then once routes are computed we finalize it with
+// the attachedRoute count.
+func FinalGatewayStatusCollectionAttachedRoutes(
+	gateways krt.Collection[*gwv1.Gateway],
+	routeAttachments krt.Collection[*RouteAttachment],
+	routeAttachmentsIndex krt.Index[types.NamespacedName, *RouteAttachment],
+	krtopts krtutil.KrtOptions,
+	rep reports.Reporter,
+) {
+	_ = krt.NewCollection(
+		gateways,
+		func(ctx krt.HandlerContext, obj *gwv1.Gateway) *gatewayStatusUpdate {
+			routeAttachmentsForGw := krt.Fetch(ctx, routeAttachments, krt.FilterIndex(routeAttachmentsIndex, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}))
+			counts := map[string]uint{}
+			for _, r := range routeAttachmentsForGw {
+				counts[r.ListenerName]++
+			}
+			for _, listener := range obj.Spec.Listeners {
+				rep.Gateway(obj).Listener(&listener).SetAttachedRoutes(counts[string(listener.Name)])
+			}
+			// Return a wrapper instead of the raw Gateway object
+			return &gatewayStatusUpdate{gateway: obj}
+		}, krtopts.ToOptions("GatewayFinalStatus")...)
 }

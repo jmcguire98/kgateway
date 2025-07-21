@@ -38,7 +38,6 @@ func toResourceWithReports(gw types.NamespacedName, t any, reportMap reports.Rep
 	panic("unknown resource kind")
 }
 
-// TODO: we need some way to associate this to a specific instance of the proxy!!
 type Bind struct {
 	*api.Bind
 }
@@ -144,12 +143,12 @@ func GatewayCollection(
 		// Extract the addresses. A gwv1 will bind to a specific Service
 		gatewayServices, err := extractGatewayServices(domainSuffix, obj)
 		if len(gatewayServices) == 0 && err != nil {
-			// Short circuit if its a hard failure
+			// Short circuit if it's a hard failure
 			logger.Error("failed to translate gwv1", "name", obj.GetName(), "namespace", obj.GetNamespace(), "err", err.Message)
 			gwReporter.SetCondition(reporter.GatewayCondition{
 				Type:    gwv1.GatewayConditionAccepted,
 				Status:  metav1.ConditionFalse,
-				Reason:  gwv1.GatewayReasonInvalid, // TODO: check reason
+				Reason:  gwv1.GatewayReasonInvalid,
 				Message: err.Message,
 			})
 			return nil
@@ -163,12 +162,12 @@ func GatewayCollection(
 			allowed, _ := generateSupportedKinds(l)
 
 			// Set all listener conditions from the actual status
-			for _, condition := range lstatus.Conditions {
+			for _, lcond := range lstatus.Conditions {
 				gwReporter.Listener(&l).SetCondition(reporter.ListenerCondition{
-					Type:    gwv1.ListenerConditionType(condition.Type),
-					Status:  condition.Status,
-					Reason:  gwv1.ListenerConditionReason(condition.Reason),
-					Message: condition.Message,
+					Type:    gwv1.ListenerConditionType(lcond.Type),
+					Status:  lcond.Status,
+					Reason:  gwv1.ListenerConditionReason(lcond.Reason),
+					Message: lcond.Message,
 				})
 			}
 

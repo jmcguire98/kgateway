@@ -23,7 +23,6 @@ import (
 // TODO: refactor this struct + methods to better reflect the usage now in proxy_syncer
 
 func (r *ReportMap) BuildGWStatus(ctx context.Context, gw gwv1.Gateway) *gwv1.GatewayStatus {
-	fmt.Printf("debug(npolshak) BuildGWStatus %v\n", gw.Name)
 	gwReport := r.Gateway(&gw)
 	if gwReport == nil {
 		return nil
@@ -53,7 +52,6 @@ func (r *ReportMap) BuildGWStatus(ctx context.Context, gw gwv1.Gateway) *gwv1.Ga
 		finalListeners = append(finalListeners, lisReport.Status)
 	}
 
-	fmt.Printf("debug(npolshak) adding missing gateway conditions %v\n", gw.Name)
 	addMissingGatewayConditions(r.Gateway(&gw))
 
 	finalConditions := make([]metav1.Condition, 0)

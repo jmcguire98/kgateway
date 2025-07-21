@@ -6,6 +6,7 @@ import (
 	"github.com/agentgateway/agentgateway/go/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -640,7 +641,7 @@ func TestADPResourceEquals(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.resource1.Equals(tc.resource2)
+			result := proto.Equal(tc.resource1.Resource, tc.resource2.Resource) && tc.resource1.Gateway == tc.resource2.Gateway
 			assert.Equal(t, tc.expected, result)
 		})
 	}

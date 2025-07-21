@@ -59,6 +59,14 @@ The syncer uses the following APIs:
 
 ### Conformance tests
 
+Setup the cluster:
+
+```shell
+AGENTGATEWAY=true ./hack/kind/setup-kind.sh
+```
+
+Retag and load the image to match the default image tag in the values file for agentgateway, then run:
+
 ```
 make run HELM_ADDITIONAL_VALUES=test/kubernetes/e2e/tests/manifests/agent-gateway-integration.yaml; CONFORMANCE_GATEWAY_CLASS=agentgateway make conformance 
 ```

@@ -93,6 +93,7 @@ type StartConfig struct {
 // context is cancelled
 type ControllerBuilder struct {
 	proxySyncer *proxy_syncer.ProxySyncer
+	agwSyncer   *agentgatewaysyncer.AgentGwSyncer
 	cfg         StartConfig
 	mgr         ctrl.Manager
 	commoncol   *common.CommonCollections
@@ -212,9 +213,10 @@ func NewControllerBuilder(ctx context.Context, cfg StartConfig) (*ControllerBuil
 	)
 	proxySyncer.Init(ctx, cfg.KrtOptions)
 
+	var agentGatewaySyncer *agentgatewaysyncer.AgentGwSyncer
 	if cfg.SetupOpts.GlobalSettings.EnableAgentGateway {
 		domainSuffix := "cluster.local" // TODO: don't hard code
-		agentGatewaySyncer := agentgatewaysyncer.NewAgentGwSyncer(
+		agentGatewaySyncer = agentgatewaysyncer.NewAgentGwSyncer(
 			cfg.ControllerName,
 			cfg.AgentGatewayClassName,
 			cfg.Client,
@@ -243,6 +245,7 @@ func NewControllerBuilder(ctx context.Context, cfg StartConfig) (*ControllerBuil
 	setupLog.Info("starting controller builder")
 	cb := &ControllerBuilder{
 		proxySyncer: proxySyncer,
+		agwSyncer:   agentGatewaySyncer,
 		cfg:         cfg,
 		mgr:         mgr,
 		commoncol:   commoncol,
@@ -355,7 +358,13 @@ func (c *ControllerBuilder) Start(ctx context.Context) error {
 }
 
 func (c *ControllerBuilder) HasSynced() bool {
-	return c.proxySyncer.HasSynced()
+	var hasSynced bool
+	if c.agwSyncer != nil {
+		hasSynced = c.proxySyncer.HasSynced() && c.agwSyncer.HasSynced()
+	} else {
+		hasSynced = c.proxySyncer.HasSynced()
+	}
+	return hasSynced
 }
 
 // GetDefaultClassInfo returns the default GatewayClass for the kgateway controller.
