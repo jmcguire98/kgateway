@@ -360,6 +360,9 @@ func buildGatewayRoutes[T any](parentRefs []routeParentReference, convertRules f
 // target the given HTTPRoute. It uses the exported LookupTargetingPolicies
 // from PolicyIndex.
 func attachRoutePolicies(ctx *RouteContext, route *gwv1.HTTPRoute) {
+	if ctx.Backends == nil {
+		return
+	}
 	pi := ctx.Backends.PolicyIndex()
 	if pi == nil {
 		return
