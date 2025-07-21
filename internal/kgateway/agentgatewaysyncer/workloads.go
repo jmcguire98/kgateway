@@ -293,21 +293,6 @@ func serviceToAddress(s *api.Service) *api.Address {
 	}
 }
 
-//	func Istio(p *networkingv1alpha3.ServicePort) api.AppProtocol {
-//		return toAppProtocolFromProtocol(p.Protocol)
-//	}
-func toAppProtocolFromProtocol(p string) api.AppProtocol {
-	switch p {
-	case "HTTP":
-		return api.AppProtocol_HTTP11
-	case "HTTP2":
-		return api.AppProtocol_HTTP2
-	case "GRPC":
-		return api.AppProtocol_GRPC
-	}
-	return api.AppProtocol_UNKNOWN
-}
-
 func GetHostAddressesFromServiceEntry(se *networkingclient.ServiceEntry) map[string][]netip.Addr {
 	if se == nil {
 		return map[string][]netip.Addr{}
