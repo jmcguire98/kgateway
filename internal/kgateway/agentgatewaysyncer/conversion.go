@@ -34,8 +34,6 @@ import (
 	gwv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gwv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	"context"
-
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -492,7 +490,7 @@ func buildADPDestination(
 		if kgwBackend != nil {
 			gk := schema.GroupKind{Group: kgwBackend.Group, Kind: kgwBackend.Kind}
 			if plug, ok := ctx.Plugins.ContributesBackends[gk]; ok && plug.AgentBackendInit != nil && plug.AgentBackendInit.TranslateBackend != nil {
-				rbs, err2 := plug.AgentBackendInit.TranslateBackend(context.TODO(), *kgwBackend)
+				rbs, err2 := plug.AgentBackendInit.TranslateBackend(*kgwBackend)
 				if err2 != nil {
 					return nil, &reporter.RouteCondition{
 						Type:    gwv1.RouteConditionResolvedRefs,
@@ -507,7 +505,6 @@ func buildADPDestination(
 				}
 			}
 		}
-		// fallback to existing MCP logic (TODO)
 	default:
 		return nil, &reporter.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,

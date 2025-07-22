@@ -120,7 +120,7 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 					InitBackend: processBackend,
 				},
 				AgentBackendInit: &ir.AgentBackendInit{
-					TranslateBackend: func(ctx context.Context, in ir.BackendObjectIR) ([]*api.RouteBackend, error) {
+					TranslateBackend: func(in ir.BackendObjectIR) ([]*api.RouteBackend, error) {
 						be, ok := in.Obj.(*v1alpha1.Backend)
 						if !ok {
 							return nil, fmt.Errorf("unexpected object type")

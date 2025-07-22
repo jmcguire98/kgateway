@@ -36,7 +36,7 @@ type BackendInit struct {
 // multiple RouteBackends when the Backend expands into multiple targets.
 // Any error returned will be surfaced on the referencing Route.
 type AgentBackendInit struct {
-	TranslateBackend func(ctx context.Context, in BackendObjectIR) ([]*api.RouteBackend, error)
+	TranslateBackend func(in BackendObjectIR) ([]*api.RouteBackend, error)
 }
 
 type PolicyRef struct {
