@@ -489,13 +489,13 @@ func buildADPDestination(
 		if kgwBackend != nil {
 			gk := schema.GroupKind{Group: kgwBackend.Group, Kind: kgwBackend.Kind}
 			if plug, ok := ctx.Plugins.ContributesBackends[gk]; ok && plug.AgentBackendInit != nil && plug.AgentBackendInit.TranslateBackend != nil {
-				rb, err2 := plug.AgentBackendInit.TranslateBackend(*kgwBackend)
-				if err2 != nil {
+				rb, backendTranslationErr := plug.AgentBackendInit.TranslateBackend(*kgwBackend)
+				if backendTranslationErr != nil {
 					return nil, &reporter.RouteCondition{
 						Type:    gwv1.RouteConditionResolvedRefs,
 						Status:  metav1.ConditionFalse,
 						Reason:  gwv1.RouteReasonBackendNotFound,
-						Message: fmt.Sprintf("backend translation failed: %v", err2),
+						Message: fmt.Sprintf("backend translation failed: %v", backendTranslationErr),
 					}
 				}
 				if rb != nil {
