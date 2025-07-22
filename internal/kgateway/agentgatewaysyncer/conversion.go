@@ -486,11 +486,10 @@ func buildADPDestination(
 			}
 		}
 
-		// Attempt to translate backend using plugin system
 		if kgwBackend != nil {
 			gk := schema.GroupKind{Group: kgwBackend.Group, Kind: kgwBackend.Kind}
 			if plug, ok := ctx.Plugins.ContributesBackends[gk]; ok && plug.AgentBackendInit != nil && plug.AgentBackendInit.TranslateBackend != nil {
-				rbs, err2 := plug.AgentBackendInit.TranslateBackend(*kgwBackend)
+				rb, err2 := plug.AgentBackendInit.TranslateBackend(*kgwBackend)
 				if err2 != nil {
 					return nil, &reporter.RouteCondition{
 						Type:    gwv1.RouteConditionResolvedRefs,
@@ -499,9 +498,8 @@ func buildADPDestination(
 						Message: fmt.Sprintf("backend translation failed: %v", err2),
 					}
 				}
-				if len(rbs) > 0 {
-					// Return the first backend for now (TODO support multiple)
-					return rbs[0], invalidBackendErr
+				if rb != nil {
+					return rb, nil
 				}
 			}
 		}

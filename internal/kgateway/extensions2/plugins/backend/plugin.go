@@ -120,7 +120,7 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 					InitBackend: processBackend,
 				},
 				AgentBackendInit: &ir.AgentBackendInit{
-					TranslateBackend: func(in ir.BackendObjectIR) ([]*api.RouteBackend, error) {
+					TranslateBackend: func(in ir.BackendObjectIR) (*api.RouteBackend, error) {
 						be, ok := in.Obj.(*v1alpha1.Backend)
 						if !ok {
 							return nil, fmt.Errorf("unexpected object type")
@@ -128,16 +128,16 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 						if be.Spec.Type != v1alpha1.BackendTypeStatic {
 							return nil, nil // not applicable
 						}
-						var out []*api.RouteBackend
-						for _, h := range be.Spec.Static.Hosts {
-							rb := &api.RouteBackend{
-								Kind:   &api.RouteBackend_Service{Service: be.Namespace + "/" + h.Host},
-								Port:   int32(h.Port),
-								Weight: 1,
-							}
-							out = append(out, rb)
+						if len(be.Spec.Static.Hosts) == 0 {
+							return nil, fmt.Errorf("static backend has no hosts")
 						}
-						return out, nil
+						h := be.Spec.Static.Hosts[0]
+						rb := &api.RouteBackend{
+							Kind:   &api.RouteBackend_Service{Service: be.Namespace + "/" + h.Host},
+							Port:   int32(h.Port),
+							Weight: 1,
+						}
+						return rb, nil
 					},
 				},
 				Endpoints: endpoints,
