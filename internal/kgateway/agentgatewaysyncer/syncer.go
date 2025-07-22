@@ -392,6 +392,7 @@ func (s *AgentGwSyncer) buildADPResources(
 		Namespaces:     inputs.Namespaces,
 		InferencePools: inputs.InferencePools,
 		Backends:       s.commonCols.BackendIndex,
+		Plugins:        s.plugins,
 	}
 	adpRoutes := ADPRouteCollection(inputs.HTTPRoutes, inputs.GRPCRoutes, inputs.TCPRoutes, inputs.TLSRoutes, gateways, inputs.Gateways, routeInputs, krtopts, repMap, rep, s.plugins)
 

@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	envoy_config_cluster_v3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	envoy_config_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/utils/ptr"
 
+	"github.com/agentgateway/agentgateway/go/api"
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
@@ -116,6 +118,27 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 			gk: {
 				BackendInit: ir.BackendInit{
 					InitBackend: processBackend,
+				},
+				AgentBackendInit: &ir.AgentBackendInit{
+					TranslateBackend: func(ctx context.Context, in ir.BackendObjectIR) ([]*api.RouteBackend, error) {
+						be, ok := in.Obj.(*v1alpha1.Backend)
+						if !ok {
+							return nil, fmt.Errorf("unexpected object type")
+						}
+						if be.Spec.Type != v1alpha1.BackendTypeStatic {
+							return nil, nil // not applicable
+						}
+						var out []*api.RouteBackend
+						for _, h := range be.Spec.Static.Hosts {
+							rb := &api.RouteBackend{
+								Kind:   &api.RouteBackend_Service{Service: be.Namespace + "/" + h.Host},
+								Port:   int32(h.Port),
+								Weight: 1,
+							}
+							out = append(out, rb)
+						}
+						return out, nil
+					},
 				},
 				Endpoints: endpoints,
 				Backends:  bcol,

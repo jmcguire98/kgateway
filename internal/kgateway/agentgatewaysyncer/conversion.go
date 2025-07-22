@@ -34,6 +34,8 @@ import (
 	gwv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gwv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	"context"
+
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -458,8 +460,6 @@ func buildADPDestination(
 		}
 		rb.Kind = &api.RouteBackend_Service{Service: namespace + "/" + hostname}
 	case wellknown.BackendGVK.GroupKind():
-		// check that the backend is of MCP kind
-		// TODO: support other kinds
 
 		// Create the source ObjectSource representing the route object making the reference
 		routeSrc := ir.ObjectSource{
@@ -477,7 +477,7 @@ func buildADPDestination(
 			Port:      to.Port,
 		}
 
-		mcpBackend, err := backendCol.GetBackendFromRef(ctx.Krt, routeSrc, backendRef)
+		kgwBackend, err := backendCol.GetBackendFromRef(ctx.Krt, routeSrc, backendRef)
 		if err != nil {
 			logger.Error("failed to get MCP backend", "error", err)
 			return nil, &reporter.RouteCondition{
@@ -488,12 +488,26 @@ func buildADPDestination(
 			}
 		}
 
-		// TODO: convert to api Backend type
-
-		// Use the backend information if available
-		if mcpBackend != nil {
-			logger.Debug("successfully resolved MCP backend", "backend", mcpBackend.Name)
+		// Attempt to translate backend using plugin system
+		if kgwBackend != nil {
+			gk := schema.GroupKind{Group: kgwBackend.Group, Kind: kgwBackend.Kind}
+			if plug, ok := ctx.Plugins.ContributesBackends[gk]; ok && plug.AgentBackendInit != nil && plug.AgentBackendInit.TranslateBackend != nil {
+				rbs, err2 := plug.AgentBackendInit.TranslateBackend(context.TODO(), *kgwBackend)
+				if err2 != nil {
+					return nil, &reporter.RouteCondition{
+						Type:    gwv1.RouteConditionResolvedRefs,
+						Status:  metav1.ConditionFalse,
+						Reason:  gwv1.RouteReasonBackendNotFound,
+						Message: fmt.Sprintf("backend translation failed: %v", err2),
+					}
+				}
+				if len(rbs) > 0 {
+					// Return the first backend for now (TODO support multiple)
+					return rbs[0], invalidBackendErr
+				}
+			}
 		}
+		// fallback to existing MCP logic (TODO)
 	default:
 		return nil, &reporter.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,

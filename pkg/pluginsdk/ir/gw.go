@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/agentgateway/agentgateway/go/api"
 	envoy_config_cluster_v3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -26,6 +27,16 @@ type BackendInit struct {
 	// This will never override a ClusterLoadAssignment that is set inside of an InitBackend implementation.
 	// The CLA is only added if the Cluster has a compatible type (EDS, LOGICAL_DNS, STRICT_DNS).
 	InitBackend func(ctx context.Context, in BackendObjectIR, out *envoy_config_cluster_v3.Cluster) *EndpointsForBackend
+}
+
+// AgentBackendInit defines the translation hook for agentgateway backends. Implementations
+// should translate the provided BackendObjectIR into one or more RouteBackend objects
+// understood by the agentgateway data-plane.
+// The returned slice may be empty (in case the Backend is not applicable) or contain
+// multiple RouteBackends when the Backend expands into multiple targets.
+// Any error returned will be surfaced on the referencing Route.
+type AgentBackendInit struct {
+	TranslateBackend func(ctx context.Context, in BackendObjectIR) ([]*api.RouteBackend, error)
 }
 
 type PolicyRef struct {

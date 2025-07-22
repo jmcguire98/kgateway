@@ -80,9 +80,12 @@ type PolicyPlugin struct {
 
 type BackendPlugin struct {
 	ir.BackendInit
-	AliasKinds []schema.GroupKind
-	Backends   krt.Collection[ir.BackendObjectIR]
-	Endpoints  krt.Collection[ir.EndpointsForBackend]
+	// AgentBackendInit is used when translating backends for agentgateway proxies.
+	// If nil, the backend type is not supported by agentgateway.
+	AgentBackendInit *ir.AgentBackendInit
+	AliasKinds       []schema.GroupKind
+	Backends         krt.Collection[ir.BackendObjectIR]
+	Endpoints        krt.Collection[ir.EndpointsForBackend]
 }
 
 type KGwTranslator interface {
