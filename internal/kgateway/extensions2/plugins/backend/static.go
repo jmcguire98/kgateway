@@ -83,7 +83,7 @@ func processStaticBackendForEnvoy(in *v1alpha1.StaticBackend, out *envoy_config_
 	return nil
 }
 
-func processStaticBackendForAgentGateway(be *v1alpha1.Backend) (*api.Backend, error) {
+func processStaticBackendForAgentGateway(be *v1alpha1.Backend) ([]*api.Backend, error) {
 	if len(be.Spec.Static.Hosts) > 1 {
 		// TODO(jmcguire98): as of now agentgateway does not support multiple hosts for static backends
 		// if we want to have similar behavior to envoy (load balancing across all hosts provided)
@@ -93,7 +93,7 @@ func processStaticBackendForAgentGateway(be *v1alpha1.Backend) (*api.Backend, er
 	if len(be.Spec.Static.Hosts) == 0 {
 		return nil, fmt.Errorf("static backends must have at least one host")
 	}
-	return &api.Backend{
+	return []*api.Backend{&api.Backend{
 		Name: be.Namespace + "/" + be.Name,
 		Kind: &api.Backend_Static{
 			Static: &api.StaticBackend{
@@ -101,7 +101,7 @@ func processStaticBackendForAgentGateway(be *v1alpha1.Backend) (*api.Backend, er
 				Port: int32(be.Spec.Static.Hosts[0].Port),
 			},
 		},
-	}, nil
+	}}, nil
 }
 
 func processEndpointsStatic(_ *v1alpha1.StaticBackend) *ir.EndpointsForBackend {
