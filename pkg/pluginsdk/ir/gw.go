@@ -9,6 +9,8 @@ import (
 
 	"github.com/agentgateway/agentgateway/go/api"
 	envoy_config_cluster_v3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
+	"istio.io/istio/pkg/kube/krt"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -32,7 +34,7 @@ type BackendInit struct {
 	// AgentBackendInit defines the translation hook for agentgateway backends. Implementations
 	// should translate the provided backend object into one or more api.Backend objects
 	// understood by the agentgateway data-plane.
-	InitAgentBackend func(be *v1alpha1.Backend) (*api.Backend, error)
+	InitAgentBackend func(ctx krt.HandlerContext, nsCol krt.Collection[*corev1.Namespace], svcCol krt.Collection[*corev1.Service], be *v1alpha1.Backend) ([]*api.Backend, error)
 }
 
 type PolicyRef struct {
