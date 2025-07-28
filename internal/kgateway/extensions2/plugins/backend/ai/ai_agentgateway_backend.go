@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/agentgateway/agentgateway/go/api"
+
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 )
 
