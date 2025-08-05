@@ -15,12 +15,20 @@ import (
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	apiannotations "github.com/kgateway-dev/kgateway/v2/api/annotations"
-	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 )
 
 var VirtualBuiltInGK = schema.GroupKind{
 	Group: "builtin",
 	Kind:  "builtin",
+}
+
+// AgentGatewayBackendContext provides access to Kubernetes resources during backend translation
+type AgentGatewayBackendContext struct {
+	context.Context
+	KrtCtx     krt.HandlerContext
+	Namespaces krt.Collection[*corev1.Namespace]
+	Services   krt.Collection[*corev1.Service]
+	Secrets    krt.Collection[*corev1.Secret]
 }
 
 type BackendInit struct {
@@ -31,10 +39,10 @@ type BackendInit struct {
 	// The CLA is only added if the Cluster has a compatible type (EDS, LOGICAL_DNS, STRICT_DNS).
 	InitEnvoyBackend func(ctx context.Context, in BackendObjectIR, out *envoyclusterv3.Cluster) *EndpointsForBackend
 
-	// AgentBackendInit defines the translation hook for agentgateway backends. Implementations
-	// should translate the provided backend object into one or more api.Backend objects
-	// understood by the agentgateway data-plane.
-	InitAgentBackend func(ctx krt.HandlerContext, nsCol krt.Collection[*corev1.Namespace], svcCol krt.Collection[*corev1.Service], secrets krt.Collection[*corev1.Secret], be *v1alpha1.Backend) ([]*api.Backend, []*api.Policy, error)
+	// InitAgentBackend translates backend objects for the agent gateway data plane.
+	// It takes a BackendObjectIR (which includes the backend and any attached policies)
+	// and returns the corresponding agent gateway Backend and Policy resources.
+	InitAgentBackend func(ctx *AgentGatewayBackendContext, in BackendObjectIR) ([]*api.Backend, []*api.Policy, error)
 }
 
 type PolicyRef struct {

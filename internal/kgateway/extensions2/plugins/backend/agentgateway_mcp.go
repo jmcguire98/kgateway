@@ -12,6 +12,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 )
 
 const (
@@ -19,11 +20,14 @@ const (
 )
 
 func processMCPBackendForAgentGateway(
-	ctx krt.HandlerContext,
-	nsCol krt.Collection[*corev1.Namespace],
-	svcCol krt.Collection[*corev1.Service],
-	be *v1alpha1.Backend,
+	ctx *ir.AgentGatewayBackendContext,
+	in ir.BackendObjectIR,
 ) ([]*api.Backend, []*api.Policy, error) {
+	be, ok := in.Obj.(*v1alpha1.Backend)
+	if !ok {
+		return nil, nil, fmt.Errorf("expected *v1alpha1.Backend, got %T", in.Obj)
+	}
+
 	// Convert Kubernetes MCP targets to agentgateway format
 	var mcpTargets []*api.MCPTarget
 	var backends []*api.Backend
@@ -97,7 +101,7 @@ func processMCPBackendForAgentGateway(
 					}
 					if !namespaceSelector.Empty() {
 						// Get all namespaces and find those matching the selector
-						allNamespaces := krt.Fetch(ctx, nsCol)
+						allNamespaces := krt.Fetch(ctx.KrtCtx, ctx.Namespaces)
 						matchingNamespaces := make(map[string]bool)
 						for _, ns := range allNamespaces {
 							if namespaceSelector.Matches(labels.Set(ns.Labels)) {
@@ -119,7 +123,7 @@ func processMCPBackendForAgentGateway(
 				}
 
 				// Fetch matching services
-				matchingServices := krt.Fetch(ctx, svcCol, filters...)
+				matchingServices := krt.Fetch(ctx.KrtCtx, ctx.Services, filters...)
 
 				// Create MCP targets for each matching service
 				for _, service := range matchingServices {

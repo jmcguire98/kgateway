@@ -10,9 +10,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 )
 
-func ProcessAIBackendForAgentGateway(ctx krt.HandlerContext, be *v1alpha1.Backend, secrets krt.Collection[*corev1.Secret]) ([]*api.Backend, []*api.Policy, error) {
+func ProcessAIBackendForAgentGateway(ctx *ir.AgentGatewayBackendContext, in ir.BackendObjectIR) ([]*api.Backend, []*api.Policy, error) {
+	be, ok := in.Obj.(*v1alpha1.Backend)
+	if !ok {
+		return nil, nil, fmt.Errorf("expected *v1alpha1.Backend, got %T", in.Obj)
+	}
+
 	if be.Spec.AI == nil {
 		return nil, nil, fmt.Errorf("ai backend spec must not be nil for AI backend type")
 	}
@@ -22,11 +28,11 @@ func ProcessAIBackendForAgentGateway(ctx krt.HandlerContext, be *v1alpha1.Backen
 	var aiBackend *api.Backend
 
 	if be.Spec.AI.LLM != nil {
-		aiBackend, authPolicy = buildAIBackendFromLLM(ctx, be.Namespace, be.Name, be.Spec.AI.LLM, secrets)
+		aiBackend, authPolicy = buildAIBackendFromLLM(ctx.KrtCtx, be.Namespace, be.Name, be.Spec.AI.LLM, ctx.Secrets)
 	} else if be.Spec.AI.MultiPool != nil && len(be.Spec.AI.MultiPool.Priorities) > 0 &&
 		len(be.Spec.AI.MultiPool.Priorities[0].Pool) > 0 {
 		// For MultiPool, use the first provider from the first priority pool
-		aiBackend, authPolicy = buildAIBackendFromLLM(ctx, be.Namespace, be.Name, &be.Spec.AI.MultiPool.Priorities[0].Pool[0], secrets)
+		aiBackend, authPolicy = buildAIBackendFromLLM(ctx.KrtCtx, be.Namespace, be.Name, &be.Spec.AI.MultiPool.Priorities[0].Pool[0], ctx.Secrets)
 	} else {
 		return nil, nil, fmt.Errorf("AI backend has no valid LLM or MultiPool configuration")
 	}

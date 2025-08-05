@@ -128,6 +128,7 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 			wellknown.BackendGVK.GroupKind(): {
 				Name:                      "backend",
 				NewGatewayTranslationPass: newPlug,
+				NewAgentGatewayPass:       newAgentGatewayPlug,
 			},
 		},
 		ContributesRegistration: map[schema.GroupKind]func(){
@@ -295,20 +296,20 @@ func processBackendForEnvoy(ctx context.Context, in ir.BackendObjectIR, out *env
 	return nil
 }
 
-func processBackendForAgentGateway(ctx krt.HandlerContext,
-	nsCol krt.Collection[*corev1.Namespace],
-	svcCol krt.Collection[*corev1.Service],
-	secrets krt.Collection[*corev1.Secret],
-	be *v1alpha1.Backend,
-) ([]*api.Backend, []*api.Policy, error) {
+func processBackendForAgentGateway(ctx *ir.AgentGatewayBackendContext, in ir.BackendObjectIR) ([]*api.Backend, []*api.Policy, error) {
+	be, ok := in.Obj.(*v1alpha1.Backend)
+	if !ok {
+		return nil, nil, fmt.Errorf("expected *v1alpha1.Backend, got %T", in.Obj)
+	}
+
 	spec := be.Spec
 	switch spec.Type {
 	case v1alpha1.BackendTypeStatic:
 		return processStaticBackendForAgentGateway(be)
 	case v1alpha1.BackendTypeAI:
-		return ai.ProcessAIBackendForAgentGateway(ctx, be, secrets)
+		return ai.ProcessAIBackendForAgentGateway(ctx, in)
 	case v1alpha1.BackendTypeMCP:
-		return processMCPBackendForAgentGateway(ctx, nsCol, svcCol, be)
+		return processMCPBackendForAgentGateway(ctx, in)
 	default:
 		return nil, nil, fmt.Errorf("backend of type %s is not supported for agent gateway", spec.Type)
 	}
@@ -355,8 +356,25 @@ type backendPlugin struct {
 
 var _ ir.ProxyTranslationPass = &backendPlugin{}
 
+type agentGatewayBackendPlugin struct {
+	ir.UnimplementedAgentGatewayTranslationPass
+}
+
+var _ ir.AgentGatewayTranslationPass = &agentGatewayBackendPlugin{}
+
 func newPlug(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
 	return &backendPlugin{}
+}
+
+func newAgentGatewayPlug(reporter reports.Reporter) ir.AgentGatewayTranslationPass {
+	return &agentGatewayBackendPlugin{}
+}
+
+func (p *agentGatewayBackendPlugin) ApplyForBackend(pCtx *ir.AgentGatewayTranslationBackendContext, out *api.Backend) error {
+	// This demonstrates how translation passes can modify agent gateway backend resources
+	// in a real implementation, this would modify backend configuration based on policies
+	logger.Debug("agent gateway backend plugin processed backend", "backend", out.Name)
+	return nil
 }
 
 func (p *backendPlugin) Name() string {

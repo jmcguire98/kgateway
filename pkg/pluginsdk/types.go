@@ -63,9 +63,13 @@ type PolicyPlugin struct {
 	NewGatewayTranslationPass func(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass
 	NewAgentGatewayPass       func(reporter reports.Reporter) ir.AgentGatewayTranslationPass
 
+	// Backend processing for envoy proxy
 	ProcessBackend            ProcessBackend
 	PerClientProcessBackend   PerClientProcessBackend
 	PerClientProcessEndpoints EndpointPlugin
+
+	// Backend processing for agent gateway - unified IR-based approach
+	ProcessAgentBackend func(ctx context.Context, pol ir.PolicyIR, in ir.BackendObjectIR) error
 
 	Policies       krt.Collection[ir.PolicyWrapper]
 	GlobalPolicies func(krt.HandlerContext, AttachmentPoints) ir.PolicyIR
@@ -83,6 +87,10 @@ type BackendPlugin struct {
 	AliasKinds []schema.GroupKind
 	Backends   krt.Collection[ir.BackendObjectIR]
 	Endpoints  krt.Collection[ir.EndpointsForBackend]
+
+	// Translation pass factories for backend processing
+	NewEnvoyTranslationPass        func(ctx context.Context, reporter reports.Reporter) ir.ProxyTranslationPass
+	NewAgentGatewayTranslationPass func(ctx context.Context, reporter reports.Reporter) ir.AgentGatewayTranslationPass
 }
 
 type KGwTranslator interface {
@@ -130,7 +138,7 @@ func (p PolicyReport) MarshalJSON() ([]byte, error) {
 
 func (p PolicyPlugin) AttachmentPoints() AttachmentPoints {
 	var ret AttachmentPoints
-	if p.ProcessBackend != nil {
+	if p.ProcessBackend != nil || p.ProcessAgentBackend != nil {
 		ret = ret | BackendAttachmentPoint
 	}
 	if p.NewGatewayTranslationPass != nil {

@@ -28,7 +28,9 @@ func NewBuiltinPlugin() pluginsdk.Plugin {
 }
 
 // Pass implements the ir.AgentGatewayTranslationPass interface.
-type Pass struct{}
+type Pass struct {
+	ir.UnimplementedAgentGatewayTranslationPass
+}
 
 // NewPass creates a new Pass.
 func NewPass() *Pass {

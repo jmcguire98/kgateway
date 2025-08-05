@@ -681,7 +681,9 @@ func (tc TestCase) Run(
 
 	// Build ADP resources, backends, and addresses collections
 	adpResourcesCollection := agentGwSyncer.buildADPResources(gateways, inputs, refGrants, krtOpts)
-	adpBackendsCollection := agentGwSyncer.buildBackendCollections(inputs, krtOpts)
+	// Use the pre-built ADP backend collection from the syncer, like the main syncer does
+	adpBackendsCollection := agentGwSyncer.adpBackends
+
 	addressesCollection := agentGwSyncer.buildAddressCollections(inputs, krtOpts)
 
 	// Wait for collections to sync
