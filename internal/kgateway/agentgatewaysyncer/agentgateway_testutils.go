@@ -671,6 +671,9 @@ func (tc TestCase) Run(
 		true, // enableInferExt
 	)
 
+	// Initialize the syncer which creates the backend collections
+	agentGwSyncer.Init(krtOpts)
+
 	// Build input collections for agentgateway syncer
 	inputs := agentGwSyncer.buildInputCollections(krtOpts)
 
@@ -681,7 +684,7 @@ func (tc TestCase) Run(
 
 	// Build ADP resources, backends, and addresses collections
 	adpResourcesCollection := agentGwSyncer.buildADPResources(gateways, inputs, refGrants, krtOpts)
-	// Use the pre-built ADP backend collection from the syncer, like the main syncer does
+	// Use the pre-built ADP backend collection from the syncer
 	adpBackendsCollection := agentGwSyncer.adpBackends
 
 	addressesCollection := agentGwSyncer.buildAddressCollections(inputs, krtOpts)
