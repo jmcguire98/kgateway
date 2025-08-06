@@ -23,6 +23,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
+	agwbackend "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugins/backend/agentgateway"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugins/backend/ai"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/pluginutils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
@@ -116,7 +117,7 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 			gk: {
 				BackendInit: ir.BackendInit{
 					InitEnvoyBackend: processBackendForEnvoy,
-					InitAgentBackend: processBackendForAgentGateway,
+					InitAgentBackend: agwbackend.ProcessBackendForAgentGateway,
 				},
 				Endpoints: endpoints,
 				Backends:  bcol,
@@ -126,7 +127,7 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 			wellknown.BackendGVK.GroupKind(): {
 				Name:                      "backend",
 				NewGatewayTranslationPass: newPlug,
-				NewAgentGatewayPass:       newAgentGatewayPlug,
+				NewAgentGatewayPass:       agwbackend.NewAgentGatewayPlug,
 			},
 		},
 		ContributesRegistration: map[schema.GroupKind]func(){

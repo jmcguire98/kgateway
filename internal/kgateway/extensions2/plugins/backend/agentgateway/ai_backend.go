@@ -1,4 +1,4 @@
-package ai
+package agentgatewaybackend
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 )
 
-func ProcessAIBackendForAgentGateway(ctx *ir.AgentGatewayBackendContext, in ir.BackendObjectIR) ([]*api.Backend, []*api.Policy, error) {
+func processAIBackendForAgentGateway(ctx *ir.AgentGatewayBackendContext, in ir.BackendObjectIR) ([]*api.Backend, []*api.Policy, error) {
 	be, ok := in.Obj.(*v1alpha1.Backend)
 	if !ok {
 		return nil, nil, fmt.Errorf("expected *v1alpha1.Backend, got %T", in.Obj)
