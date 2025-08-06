@@ -3,9 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
-	"fmt"
 
-	"github.com/agentgateway/agentgateway/go/api"
 	envoyclusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	envoycorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoyroutev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
@@ -31,7 +29,6 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/plugins"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
-	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/client/clientset/versioned"
 	"github.com/kgateway-dev/kgateway/v2/pkg/logging"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
@@ -297,25 +294,6 @@ func processBackendForEnvoy(ctx context.Context, in ir.BackendObjectIR, out *env
 	return nil
 }
 
-func processBackendForAgentGateway(ctx *ir.AgentGatewayBackendContext, in ir.BackendObjectIR) ([]*api.Backend, []*api.Policy, error) {
-	be, ok := in.Obj.(*v1alpha1.Backend)
-	if !ok {
-		return nil, nil, fmt.Errorf("expected *v1alpha1.Backend, got %T", in.Obj)
-	}
-
-	spec := be.Spec
-	switch spec.Type {
-	case v1alpha1.BackendTypeStatic:
-		return processStaticBackendForAgentGateway(be)
-	case v1alpha1.BackendTypeAI:
-		return ai.ProcessAIBackendForAgentGateway(ctx, in)
-	case v1alpha1.BackendTypeMCP:
-		return processMCPBackendForAgentGateway(ctx, in)
-	default:
-		return nil, nil, fmt.Errorf("backend of type %s is not supported for agent gateway", spec.Type)
-	}
-}
-
 func parseAppProtocol(b *v1alpha1.Backend) ir.AppProtocol {
 	switch b.Spec.Type {
 	case v1alpha1.BackendTypeStatic:
@@ -357,24 +335,8 @@ type backendPlugin struct {
 
 var _ ir.ProxyTranslationPass = &backendPlugin{}
 
-type agentGatewayBackendPlugin struct {
-	agwir.UnimplementedAgentGatewayTranslationPass
-}
-
-var _ agwir.AgentGatewayTranslationPass = &agentGatewayBackendPlugin{}
-
 func newPlug(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
 	return &backendPlugin{}
-}
-
-func newAgentGatewayPlug(reporter reports.Reporter) agwir.AgentGatewayTranslationPass {
-	return &agentGatewayBackendPlugin{}
-}
-
-func (p *agentGatewayBackendPlugin) ApplyForBackend(pCtx *agwir.AgentGatewayTranslationBackendContext, out *api.Backend) error {
-	// Apply backend-specific configuration for agent gateway
-	logger.Debug("agent gateway backend plugin processed backend", "backend", out.Name)
-	return nil
 }
 
 func (p *backendPlugin) Name() string {
