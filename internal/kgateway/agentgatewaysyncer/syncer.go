@@ -79,13 +79,12 @@ const (
 // It watches Gateway resources with the agentgateway class and translates them to agentgateway configuration.
 type AgentGwSyncer struct {
 	// Core collections and dependencies
-	commonCols    *common.CommonCollections
-	mgr           manager.Manager
-	client        kube.Client
-	plugins       pluginsdk.Plugin
-	translator    *translator.AgentGatewayTranslator
-	finalBackends krt.Collection[*ir.BackendObjectIR]
-	adpBackends   krt.Collection[envoyResourceWithCustomName]
+	commonCols  *common.CommonCollections
+	mgr         manager.Manager
+	client      kube.Client
+	plugins     pluginsdk.Plugin
+	translator  *translator.AgentGatewayTranslator
+	adpBackends krt.Collection[envoyResourceWithCustomName]
 
 	// Configuration
 	controllerName        string
@@ -311,16 +310,16 @@ func (s *AgentGwSyncer) Init(krtopts krtutil.KrtOptions) {
 	logger.Debug("init agentgateway Syncer", "controllername", s.controllerName)
 
 	// Get all backends with attached policies
-	s.finalBackends = krt.JoinCollection(s.commonCols.BackendIndex.BackendsWithPolicy(),
+	finalBackends := krt.JoinCollection(s.commonCols.BackendIndex.BackendsWithPolicy(),
 		append(krtopts.ToOptions("FinalBackends"), krt.WithJoinUnchecked())...)
 
-	// Initialize the translator
 	s.translator.Init(context.TODO())
 
-	// Create ADP backend collection
 	inputs := s.buildInputCollections(krtopts)
-	// TODO: refactor collection building to match proxy syncer pattern
-	s.adpBackends = s.newADPBackendCollection(inputs, krtopts)
+
+	// TODO: as we bring the agent gateway plugin pattern to parity with the envoy proxy syncer,
+	// we may eventually not need to pass this out of init on the receiver
+	s.adpBackends = s.newADPBackendCollection(inputs, finalBackends, krtopts)
 
 	s.setupkgwResources(s.commonCols.OurClient)
 	s.setupInferenceExtensionClient()
@@ -577,10 +576,8 @@ func (s *AgentGwSyncer) buildBackendFromBackendIR(ctx krt.HandlerContext, backen
 }
 
 // newADPBackendCollection creates the ADP backend collection for agent gateway resources
-func (s *AgentGwSyncer) newADPBackendCollection(inputs Inputs, krtopts krtutil.KrtOptions) krt.Collection[envoyResourceWithCustomName] {
-	// Create the backend collection from finalBackends
-	backends := krt.NewManyCollection(s.finalBackends, func(ctx krt.HandlerContext, backendIR *ir.BackendObjectIR) []envoyResourceWithCustomName {
-		// Call the translator during Init(), not during collection processing
+func (s *AgentGwSyncer) newADPBackendCollection(inputs Inputs, finalBackends krt.Collection[*ir.BackendObjectIR], krtopts krtutil.KrtOptions) krt.Collection[envoyResourceWithCustomName] {
+	backends := krt.NewManyCollection(finalBackends, func(ctx krt.HandlerContext, backendIR *ir.BackendObjectIR) []envoyResourceWithCustomName {
 		return s.buildBackendFromBackendIR(ctx, backendIR, inputs.Services, inputs.Secrets, inputs.Namespaces)
 	}, krtopts.ToOptions("ADPBackends")...)
 

@@ -671,13 +671,11 @@ func (tc TestCase) Run(
 		true, // enableInferExt
 	)
 
-	// Initialize the syncer which creates the backend collections
+	// backend translations now happen on init, so we need to call it here
 	agentGwSyncer.Init(krtOpts)
 
-	// Build input collections for agentgateway syncer
 	inputs := agentGwSyncer.buildInputCollections(krtOpts)
 
-	// Build core collections
 	gatewayClasses := GatewayClassesCollection(inputs.GatewayClasses, krtOpts)
 	refGrants := BuildReferenceGrants(ReferenceGrantsCollection(inputs.ReferenceGrants, krtOpts))
 	gateways := agentGwSyncer.buildGatewayCollection(inputs, gatewayClasses, refGrants, krtOpts)

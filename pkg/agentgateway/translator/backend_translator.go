@@ -22,7 +22,6 @@ type AgentGatewayBackendTranslator struct {
 
 // NewAgentGatewayBackendTranslator creates a new AgentGatewayBackendTranslator
 func NewAgentGatewayBackendTranslator(extensions extensionsplug.Plugin) *AgentGatewayBackendTranslator {
-	// Extract BackendInit from plugins for backend type lookup
 	translator := &AgentGatewayBackendTranslator{
 		ContributedBackends: make(map[schema.GroupKind]ir.BackendInit),
 		ContributedPolicies: extensions.ContributesPolicies,
@@ -50,13 +49,12 @@ func (t *AgentGatewayBackendTranslator) TranslateBackend(
 		return nil, nil, errors.New("no backend translator found for " + gk.String())
 	}
 	if process.InitAgentBackend == nil {
-		return nil, nil, errors.New("no agent backend plugin found for " + gk.String())
+		return nil, nil, errors.New("no agent gateway backend plugin found for " + gk.String())
 	}
 	if backend.Errors != nil {
 		return nil, nil, fmt.Errorf("backend has errors: %w", errors.Join(backend.Errors...))
 	}
 
-	// Create AgentGatewayBackendContext with collections
 	agentCtx := &ir.AgentGatewayBackendContext{
 		Context:    context.TODO(),
 		KrtCtx:     ctx,
@@ -70,7 +68,6 @@ func (t *AgentGatewayBackendTranslator) TranslateBackend(
 		return nil, nil, fmt.Errorf("failed to initialize agent backend: %w", err)
 	}
 
-	// Apply all relevant backend policies to the translated backend
 	for _, agentBackend := range backends {
 		err := t.runBackendPolicies(ctx, backend, agentBackend)
 		if err != nil {

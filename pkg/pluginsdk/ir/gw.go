@@ -22,7 +22,7 @@ var VirtualBuiltInGK = schema.GroupKind{
 	Kind:  "builtin",
 }
 
-// AgentGatewayBackendContext provides access to Kubernetes resources during backend translation
+// AgentGatewayBackendContext provides access to collections needed during backend initialization
 type AgentGatewayBackendContext struct {
 	context.Context
 	KrtCtx     krt.HandlerContext

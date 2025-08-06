@@ -1,6 +1,5 @@
-// Package backend contains the backend plugin implementation.
-// This file contains agent gateway specific backend processing logic,
-// separated from the main envoy backend plugin implementation in plugin.go.
+// Package agentgatewaybackend contains agent gateway specific backend processing logic,
+// separated from the main envoy backend plugin implementation in the backend/plugin.go file.
 package agentgatewaybackend
 
 import (
@@ -24,15 +23,14 @@ type agentGatewayBackendPlugin struct {
 
 var _ agwir.AgentGatewayTranslationPass = &agentGatewayBackendPlugin{}
 
-// NewAgentGatewayPlug creates a new agent gateway backend plugin instance
+// NewAgentGatewayPlug creates a new agent gateway translation pass
 func NewAgentGatewayPlug(reporter reports.Reporter) agwir.AgentGatewayTranslationPass {
 	return &agentGatewayBackendPlugin{}
 }
 
-// ApplyForBackend processes backend-level configuration for agent gateway
+// ApplyForBackend processes backend configuration for agent gateway
 func (p *agentGatewayBackendPlugin) ApplyForBackend(pCtx *agwir.AgentGatewayTranslationBackendContext, out *api.Backend) error {
-	// Apply backend-specific configuration for agent gateway
-	logger.Debug("agent gateway backend plugin processed backend", "backend", out.Name)
+	logger.Debug("agent gateway backend plugin processed backend (not implemented)", "backend", out.Name)
 	return nil
 }
 

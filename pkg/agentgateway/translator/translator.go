@@ -30,12 +30,7 @@ func (s *AgentGatewayTranslator) Init(ctx context.Context) {
 	s.backendTranslator = NewAgentGatewayBackendTranslator(s.extensions)
 }
 
-// BackendTranslator returns the initialized backend translator
+// BackendTranslator returns the initialized backend translator on the AgentGatewayTranslator receiver
 func (s *AgentGatewayTranslator) BackendTranslator() *AgentGatewayBackendTranslator {
-	return s.backendTranslator
-}
-
-// GetUpstreamTranslator returns the backend translator for compatibility
-func (s *AgentGatewayTranslator) GetUpstreamTranslator() *AgentGatewayBackendTranslator {
 	return s.backendTranslator
 }

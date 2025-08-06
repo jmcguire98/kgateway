@@ -69,7 +69,7 @@ type PolicyPlugin struct {
 	PerClientProcessBackend   PerClientProcessBackend
 	PerClientProcessEndpoints EndpointPlugin
 
-	// Backend processing for agent gateway - unified IR-based approach
+	// Backend processing for agent gateway
 	ProcessAgentBackend func(ctx context.Context, pol ir.PolicyIR, in ir.BackendObjectIR) error
 
 	Policies       krt.Collection[ir.PolicyWrapper]
@@ -89,7 +89,6 @@ type BackendPlugin struct {
 	Backends   krt.Collection[ir.BackendObjectIR]
 	Endpoints  krt.Collection[ir.EndpointsForBackend]
 
-	// Translation pass factories for backend processing
 	NewEnvoyTranslationPass        func(ctx context.Context, reporter reports.Reporter) ir.ProxyTranslationPass
 	NewAgentGatewayTranslationPass func(ctx context.Context, reporter reports.Reporter) agwir.AgentGatewayTranslationPass
 }
