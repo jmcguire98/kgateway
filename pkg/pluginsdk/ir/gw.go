@@ -9,8 +9,6 @@ import (
 
 	"github.com/agentgateway/agentgateway/go/api"
 	envoyclusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
-	"istio.io/istio/pkg/kube/krt"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -20,15 +18,6 @@ import (
 var VirtualBuiltInGK = schema.GroupKind{
 	Group: "builtin",
 	Kind:  "builtin",
-}
-
-// AgentGatewayBackendContext provides access to collections needed during backend initialization
-type AgentGatewayBackendContext struct {
-	context.Context
-	KrtCtx     krt.HandlerContext
-	Namespaces krt.Collection[*corev1.Namespace]
-	Services   krt.Collection[*corev1.Service]
-	Secrets    krt.Collection[*corev1.Secret]
 }
 
 type BackendInit struct {
@@ -42,7 +31,7 @@ type BackendInit struct {
 	// InitAgentBackend translates backend objects for the agent gateway data plane.
 	// It takes a BackendObjectIR (which includes the backend and any attached policies)
 	// and returns the corresponding agent gateway Backend and Policy resources.
-	InitAgentBackend func(ctx *AgentGatewayBackendContext, in BackendObjectIR) ([]*api.Backend, []*api.Policy, error)
+	InitAgentBackend func(ctx context.Context, in BackendObjectIR) ([]*api.Backend, []*api.Policy, error)
 }
 
 type PolicyRef struct {

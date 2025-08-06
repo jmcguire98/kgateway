@@ -55,15 +55,7 @@ func (t *AgentGatewayBackendTranslator) TranslateBackend(
 		return nil, nil, fmt.Errorf("backend has errors: %w", errors.Join(backend.Errors...))
 	}
 
-	agentCtx := &ir.AgentGatewayBackendContext{
-		Context:    context.TODO(),
-		KrtCtx:     ctx,
-		Namespaces: nsCol,
-		Services:   svcCol,
-		Secrets:    secretsCol,
-	}
-
-	backends, policies, err := process.InitAgentBackend(agentCtx, *backend)
+	backends, policies, err := process.InitAgentBackend(context.TODO(), *backend)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize agent backend: %w", err)
 	}
