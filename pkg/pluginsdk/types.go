@@ -136,16 +136,16 @@ func (p PolicyReport) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// TODO: for now agentgateway can rely on envoy to indicate which policies are attachable where, since there aren't
+// any agentgateway policies implemented via plugins yet. But this may need to be revisited as we add agentgateway support
+// for additional policies.
 func (p PolicyPlugin) AttachmentPoints() AttachmentPoints {
 	var ret AttachmentPoints
-	if p.ProcessBackend != nil || p.ProcessAgentBackend != nil {
+	if p.ProcessBackend != nil {
 		ret = ret | BackendAttachmentPoint
 	}
 	if p.NewGatewayTranslationPass != nil {
 		ret = ret | GatewayAttachmentPoint
-	}
-	if p.NewAgentGatewayPass != nil {
-		ret = ret | RouteAttachmentPoint
 	}
 	return ret
 }
