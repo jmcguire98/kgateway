@@ -370,6 +370,10 @@ func buildADPHTTPDestination(
 	for _, fwd := range forwardTo {
 		dst, err := buildADPDestination(ctx, fwd, ns, wellknown.HTTPRouteGVK, ctx.Backends)
 		if err != nil {
+			// todo: this error could be a bit misleading when we are handling service backends
+			// in the case that the service is not found, the log looks like:
+			// "error":{"Type":"ResolvedRefs","Status":"False","Reason":"BackendNotFound","Message":"backend(httpbin.default.svc.cluster.local)
+			// even though we are handling service backends directly in the route, and no backend CRD is involved.
 			logger.Error("erroring building agent gateway destination", "error", err)
 			if isInvalidBackend(err) {
 				invalidBackendErr = err

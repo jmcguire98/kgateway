@@ -309,9 +309,19 @@ type Inputs struct {
 func (s *AgentGwSyncer) Init(krtopts krtutil.KrtOptions) {
 	logger.Debug("init agentgateway Syncer", "controllername", s.controllerName)
 
-	// Get all backends with attached policies
-	finalBackends := krt.JoinCollection(s.commonCols.BackendIndex.BackendsWithPolicy(),
-		append(krtopts.ToOptions("FinalBackends"), krt.WithJoinUnchecked())...)
+	// Get all backends with attached policies, filtering out Service backends
+	// Agent gateway handles Service references directly in routes and doesn't need separate backend objects,
+	// but the index seems to be adding every service as a service backend for envoy.
+	allBackends := krt.JoinCollection(s.commonCols.BackendIndex.BackendsWithPolicy(),
+		append(krtopts.ToOptions("AllBackends"), krt.WithJoinUnchecked())...)
+
+	finalBackends := krt.NewCollection(allBackends, func(kctx krt.HandlerContext, backend *ir.BackendObjectIR) **ir.BackendObjectIR {
+		// Skip Service backends - they are handled directly in route conversion
+		if backend.Group == wellknown.ServiceGVK.Group && backend.Kind == wellknown.ServiceGVK.Kind {
+			return nil
+		}
+		return &backend
+	}, krtopts.ToOptions("FinalBackends")...)
 
 	s.translator.Init(context.TODO())
 
