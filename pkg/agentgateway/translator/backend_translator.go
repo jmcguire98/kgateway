@@ -1,4 +1,4 @@
-package agentgatewaysyncer
+package translator
 
 import (
 	"context"
@@ -22,15 +22,14 @@ type AgentGatewayBackendTranslator struct {
 
 // NewAgentGatewayBackendTranslator creates a new AgentGatewayBackendTranslator
 func NewAgentGatewayBackendTranslator(extensions extensionsplug.Plugin) *AgentGatewayBackendTranslator {
+	// Extract BackendInit from plugins for backend type lookup
 	translator := &AgentGatewayBackendTranslator{
 		ContributedBackends: make(map[schema.GroupKind]ir.BackendInit),
 		ContributedPolicies: extensions.ContributesPolicies,
 	}
-
 	for k, up := range extensions.ContributesBackends {
 		translator.ContributedBackends[k] = up.BackendInit
 	}
-
 	return translator
 }
 
@@ -46,19 +45,14 @@ func (t *AgentGatewayBackendTranslator) TranslateBackend(
 		Group: backend.Group,
 		Kind:  backend.Kind,
 	}
-
 	process, ok := t.ContributedBackends[gk]
 	if !ok {
 		return nil, nil, errors.New("no backend translator found for " + gk.String())
 	}
-
 	if process.InitAgentBackend == nil {
 		return nil, nil, errors.New("no agent backend plugin found for " + gk.String())
 	}
-
 	if backend.Errors != nil {
-		// The backend has errors so we can't translate it
-		// Return the errors to signify it's not a dev error but a real error from backend object translation
 		return nil, nil, fmt.Errorf("backend has errors: %w", errors.Join(backend.Errors...))
 	}
 
@@ -71,13 +65,12 @@ func (t *AgentGatewayBackendTranslator) TranslateBackend(
 		Secrets:    secretsCol,
 	}
 
-	// Call the plugin's InitAgentBackend function
 	backends, policies, err := process.InitAgentBackend(agentCtx, *backend)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize agent backend: %w", err)
 	}
 
-	// Process backend policies using translation passes, like envoy does
+	// Apply all relevant backend policies to the translated backend
 	for _, agentBackend := range backends {
 		err := t.runBackendPolicies(ctx, backend, agentBackend)
 		if err != nil {
@@ -95,29 +88,20 @@ func (t *AgentGatewayBackendTranslator) runBackendPolicies(
 	agentBackend *api.Backend,
 ) error {
 	var errs []error
-
-	// Apply all relevant backend policies to the translated backend
 	for gk, policyPlugin := range t.ContributedPolicies {
-		// Only process if this policy plugin has ProcessAgentBackend (unified IR-based approach)
 		if policyPlugin.ProcessAgentBackend == nil {
 			continue
 		}
-
-		// Loop through all policies of this GroupKind attached to the backend
 		for _, polAttachment := range backend.AttachedPolicies.Policies[gk] {
-			// Skip if policy has errors
 			if len(polAttachment.Errors) > 0 {
 				errs = append(errs, polAttachment.Errors...)
 				continue
 			}
-
-			// Call ProcessAgentBackend for each attached policy, like envoy calls ProcessBackend
 			err := policyPlugin.ProcessAgentBackend(context.TODO(), polAttachment.PolicyIr, *backend)
 			if err != nil {
 				errs = append(errs, err)
 			}
 		}
 	}
-
 	return errors.Join(errs...)
 }

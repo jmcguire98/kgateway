@@ -1,4 +1,4 @@
-package agentgatewaysyncer
+package translator
 
 import (
 	"context"
@@ -32,5 +32,10 @@ func (s *AgentGatewayTranslator) Init(ctx context.Context) {
 
 // BackendTranslator returns the initialized backend translator
 func (s *AgentGatewayTranslator) BackendTranslator() *AgentGatewayBackendTranslator {
+	return s.backendTranslator
+}
+
+// GetUpstreamTranslator returns the backend translator for compatibility
+func (s *AgentGatewayTranslator) GetUpstreamTranslator() *AgentGatewayBackendTranslator {
 	return s.backendTranslator
 }

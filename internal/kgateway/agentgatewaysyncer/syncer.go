@@ -47,6 +47,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
+	"github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/translator"
 	kgwversioned "github.com/kgateway-dev/kgateway/v2/pkg/client/clientset/versioned"
 	"github.com/kgateway-dev/kgateway/v2/pkg/logging"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
@@ -82,7 +83,7 @@ type AgentGwSyncer struct {
 	mgr           manager.Manager
 	client        kube.Client
 	plugins       pluginsdk.Plugin
-	translator    *AgentGatewayTranslator
+	translator    *translator.AgentGatewayTranslator
 	finalBackends krt.Collection[*ir.BackendObjectIR]
 	adpBackends   krt.Collection[envoyResourceWithCustomName]
 
@@ -153,7 +154,7 @@ func NewAgentGwSyncer(
 		controllerName:        controllerName,
 		agentGatewayClassName: agentGatewayClassName,
 		plugins:               plugins,
-		translator:            NewAgentGatewayTranslator(commonCols, plugins),
+		translator:            translator.NewAgentGatewayTranslator(commonCols, plugins),
 		xdsCache:              xdsCache,
 		client:                client,
 		mgr:                   mgr,

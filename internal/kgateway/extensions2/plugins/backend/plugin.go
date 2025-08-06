@@ -31,6 +31,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/plugins"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
+	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/client/clientset/versioned"
 	"github.com/kgateway-dev/kgateway/v2/pkg/logging"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
@@ -357,22 +358,21 @@ type backendPlugin struct {
 var _ ir.ProxyTranslationPass = &backendPlugin{}
 
 type agentGatewayBackendPlugin struct {
-	ir.UnimplementedAgentGatewayTranslationPass
+	agwir.UnimplementedAgentGatewayTranslationPass
 }
 
-var _ ir.AgentGatewayTranslationPass = &agentGatewayBackendPlugin{}
+var _ agwir.AgentGatewayTranslationPass = &agentGatewayBackendPlugin{}
 
 func newPlug(ctx context.Context, tctx ir.GwTranslationCtx, reporter reports.Reporter) ir.ProxyTranslationPass {
 	return &backendPlugin{}
 }
 
-func newAgentGatewayPlug(reporter reports.Reporter) ir.AgentGatewayTranslationPass {
+func newAgentGatewayPlug(reporter reports.Reporter) agwir.AgentGatewayTranslationPass {
 	return &agentGatewayBackendPlugin{}
 }
 
-func (p *agentGatewayBackendPlugin) ApplyForBackend(pCtx *ir.AgentGatewayTranslationBackendContext, out *api.Backend) error {
-	// This demonstrates how translation passes can modify agent gateway backend resources
-	// in a real implementation, this would modify backend configuration based on policies
+func (p *agentGatewayBackendPlugin) ApplyForBackend(pCtx *agwir.AgentGatewayTranslationBackendContext, out *api.Backend) error {
+	// Apply backend-specific configuration for agent gateway
 	logger.Debug("agent gateway backend plugin processed backend", "backend", out.Name)
 	return nil
 }
