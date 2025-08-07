@@ -308,25 +308,14 @@ type Inputs struct {
 func (s *AgentGwSyncer) Init(krtopts krtutil.KrtOptions) {
 	logger.Debug("init agentgateway Syncer", "controllername", s.controllerName)
 
-	// Get all backends with attached policies, filtering out Service backends
-	// Agent gateway handles Service references directly in routes and doesn't need separate backend objects,
-	// but the index seems to be adding every service as a service backend for envoy.
-	allBackends := krt.JoinCollection(s.commonCols.BackendIndex.BackendsWithPolicy(),
-		append(krtopts.ToOptions("AllBackends"), krt.WithJoinUnchecked())...)
-
-	finalBackends := krt.NewCollection(allBackends, func(kctx krt.HandlerContext, backend *ir.BackendObjectIR) *ir.BackendObjectIR {
-		if backend.Group == wellknown.ServiceGVK.Group && backend.Kind == wellknown.ServiceGVK.Kind {
-			return nil
-		}
-		return backend
-	}, krtopts.ToOptions("FinalBackends")...)
-
 	s.translator.Init()
 
 	inputs := s.buildInputCollections(krtopts)
 
 	s.setupkgwResources(s.commonCols.OurClient)
 	s.setupInferenceExtensionClient()
+
+	finalBackends, _ := s.buildBackendCollections(inputs, krtopts)
 
 	// Pass finalBackends into buildResourceCollections instead of storing on syncer
 	s.buildResourceCollections(inputs, finalBackends, krtopts)
@@ -590,6 +579,27 @@ func (s *AgentGwSyncer) newADPBackendCollection(inputs Inputs, finalBackends krt
 	}, krtopts.ToOptions("ADPBackends")...)
 
 	return backends
+}
+
+// buildBackendCollections builds the filtered backend IR collection and the corresponding ADP backend collection
+func (s *AgentGwSyncer) buildBackendCollections(
+	inputs Inputs,
+	krtopts krtutil.KrtOptions,
+) (krt.Collection[ir.BackendObjectIR], krt.Collection[envoyResourceWithCustomName]) {
+	// Get all backends with attached policies, filtering out Service backends
+	// Agent gateway handles Service references directly in routes and doesn't need separate backend objects
+	allBackends := krt.JoinCollection(s.commonCols.BackendIndex.BackendsWithPolicy(),
+		append(krtopts.ToOptions("AllBackends"), krt.WithJoinUnchecked())...)
+
+	finalBackends := krt.NewCollection(allBackends, func(kctx krt.HandlerContext, backend *ir.BackendObjectIR) *ir.BackendObjectIR {
+		if backend.Group == wellknown.ServiceGVK.Group && backend.Kind == wellknown.ServiceGVK.Kind {
+			return nil
+		}
+		return backend
+	}, krtopts.ToOptions("FinalBackends")...)
+
+	adpBackends := s.newADPBackendCollection(inputs, finalBackends, krtopts)
+	return finalBackends, adpBackends
 }
 
 // getProtocolAndTLSConfig extracts protocol and TLS configuration from a gateway
