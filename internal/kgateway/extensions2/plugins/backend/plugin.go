@@ -302,7 +302,7 @@ func processBackendForEnvoy(ctx context.Context, in ir.BackendObjectIR, out *env
 }
 
 // processBackendForAgentGateway handles the main backend processing logic for agent gateway
-func processBackendForAgentGateway(ctx context.Context, in ir.BackendObjectIR) ([]*api.Backend, []*api.Policy, error) {
+func processBackendForAgentGateway(in ir.BackendObjectIR) ([]*api.Backend, []*api.Policy, error) {
 	be, ok := in.Obj.(*v1alpha1.Backend)
 	if !ok {
 		return nil, nil, fmt.Errorf("failed to cast backend object")

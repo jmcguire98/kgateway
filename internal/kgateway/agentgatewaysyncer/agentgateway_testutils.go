@@ -43,6 +43,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/client/clientset/versioned/fake"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 	common "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/collections"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/schemes"
 	"github.com/kgateway-dev/kgateway/v2/pkg/settings"
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/envutils"
@@ -657,7 +658,8 @@ func (tc TestCase) Run(
 
 	results := make(map[types.NamespacedName]ActualTestResult)
 
-	// Create and initialize AgentGwSyncer for testing
+	// Instead of calling full Init(), manually initialize just what we need for testing
+	// to avoid race conditions with XDS collection building
 	agentGwSyncer := NewAgentGwSyncer(
 		wellknown.DefaultGatewayControllerName,
 		wellknown.DefaultAgentGatewayClassName,
@@ -670,20 +672,37 @@ func (tc TestCase) Run(
 		"Kubernetes",
 		true, // enableInferExt
 	)
-
-	// backend translations now happen on init, so we need to call it here
-	agentGwSyncer.Init(krtOpts)
+	agentGwSyncer.translator.Init()
 
 	inputs := agentGwSyncer.buildInputCollections(krtOpts)
+
+	// Helper function to build backend collections
+	buildBackendCollections := func() (krt.Collection[ir.BackendObjectIR], krt.Collection[envoyResourceWithCustomName]) {
+		allBackends := krt.JoinCollection(agentGwSyncer.commonCols.BackendIndex.BackendsWithPolicy(),
+			append(krtOpts.ToOptions("AllBackends"), krt.WithJoinUnchecked())...)
+
+		finalBackends := krt.NewCollection(allBackends, func(kctx krt.HandlerContext, backend *ir.BackendObjectIR) *ir.BackendObjectIR {
+			// Skip Service backends - they are handled directly in route conversion
+			if backend.Group == wellknown.ServiceGVK.Group && backend.Kind == wellknown.ServiceGVK.Kind {
+				return nil
+			}
+			return backend
+		}, krtOpts.ToOptions("FinalBackends")...)
+
+		// Create ADP backend collection from finalBackends
+		adpBackends := agentGwSyncer.newADPBackendCollection(inputs, finalBackends, krtOpts)
+
+		return finalBackends, adpBackends
+	}
+
+	_, adpBackendsCollection := buildBackendCollections()
 
 	gatewayClasses := GatewayClassesCollection(inputs.GatewayClasses, krtOpts)
 	refGrants := BuildReferenceGrants(ReferenceGrantsCollection(inputs.ReferenceGrants, krtOpts))
 	gateways := agentGwSyncer.buildGatewayCollection(inputs, gatewayClasses, refGrants, krtOpts)
 
-	// Build ADP resources, backends, and addresses collections
+	// Build ADP resources and addresses collections
 	adpResourcesCollection := agentGwSyncer.buildADPResources(gateways, inputs, refGrants, krtOpts)
-	// Use the pre-built ADP backend collection from the syncer
-	adpBackendsCollection := agentGwSyncer.adpBackends
 
 	addressesCollection := agentGwSyncer.buildAddressCollections(inputs, krtOpts)
 

@@ -1,8 +1,6 @@
 package translator
 
 import (
-	"context"
-
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
 )
@@ -26,7 +24,7 @@ func NewAgentGatewayTranslator(
 }
 
 // Init initializes the translator components
-func (s *AgentGatewayTranslator) Init(ctx context.Context) {
+func (s *AgentGatewayTranslator) Init() {
 	s.backendTranslator = NewAgentGatewayBackendTranslator(s.extensions)
 }
 

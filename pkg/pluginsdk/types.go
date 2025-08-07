@@ -70,7 +70,7 @@ type PolicyPlugin struct {
 	PerClientProcessEndpoints EndpointPlugin
 
 	// Backend processing for agent gateway
-	ProcessAgentBackend func(ctx context.Context, pol ir.PolicyIR, in ir.BackendObjectIR) error
+	ProcessAgentBackend func(pol ir.PolicyIR, in ir.BackendObjectIR) error
 
 	Policies       krt.Collection[ir.PolicyWrapper]
 	GlobalPolicies func(krt.HandlerContext, AttachmentPoints) ir.PolicyIR

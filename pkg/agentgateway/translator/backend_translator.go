@@ -1,7 +1,6 @@
 package translator
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -55,7 +54,7 @@ func (t *AgentGatewayBackendTranslator) TranslateBackend(
 		return nil, nil, fmt.Errorf("backend has errors: %w", errors.Join(backend.Errors...))
 	}
 
-	backends, policies, err := process.InitAgentBackend(context.TODO(), *backend)
+	backends, policies, err := process.InitAgentBackend(*backend)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize agent backend: %w", err)
 	}
@@ -86,7 +85,7 @@ func (t *AgentGatewayBackendTranslator) runBackendPolicies(
 				errs = append(errs, polAttachment.Errors...)
 				continue
 			}
-			err := policyPlugin.ProcessAgentBackend(context.TODO(), polAttachment.PolicyIr, *backend)
+			err := policyPlugin.ProcessAgentBackend(polAttachment.PolicyIr, *backend)
 			if err != nil {
 				errs = append(errs, err)
 			}

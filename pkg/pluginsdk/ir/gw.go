@@ -31,7 +31,7 @@ type BackendInit struct {
 	// InitAgentBackend translates backend objects for the agent gateway data plane.
 	// It takes a BackendObjectIR (which includes the backend and any attached policies)
 	// and returns the corresponding agent gateway Backend and Policy resources.
-	InitAgentBackend func(ctx context.Context, in BackendObjectIR) ([]*api.Backend, []*api.Policy, error)
+	InitAgentBackend func(in BackendObjectIR) ([]*api.Backend, []*api.Policy, error)
 }
 
 type PolicyRef struct {
