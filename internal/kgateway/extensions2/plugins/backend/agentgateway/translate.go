@@ -105,10 +105,12 @@ func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcoll
 
 	// Extract auth token and model based on provider
 	if llm.Provider.OpenAI != nil {
+		openai := &api.AIBackend_OpenAI{}
+		if llm.Provider.OpenAI.Model != nil {
+			openai.Model = &wrappers.StringValue{Value: *llm.Provider.OpenAI.Model}
+		}
 		aiBackend.Provider = &api.AIBackend_Openai{
-			Openai: &api.AIBackend_OpenAI{
-				Model: &wrappers.StringValue{Value: *llm.Provider.OpenAI.Model},
-			},
+			Openai: openai,
 		}
 		auth = buildTranslatedAuthPolicy(krtctx, &llm.Provider.OpenAI.AuthToken, secrets, be.Namespace)
 	} else if llm.Provider.AzureOpenAI != nil {
@@ -117,10 +119,12 @@ func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcoll
 		}
 		auth = buildTranslatedAuthPolicy(krtctx, &llm.Provider.AzureOpenAI.AuthToken, secrets, be.Namespace)
 	} else if llm.Provider.Anthropic != nil {
+		anthropic := &api.AIBackend_Anthropic{}
+		if llm.Provider.Anthropic.Model != nil {
+			anthropic.Model = &wrappers.StringValue{Value: *llm.Provider.Anthropic.Model}
+		}
 		aiBackend.Provider = &api.AIBackend_Anthropic_{
-			Anthropic: &api.AIBackend_Anthropic{
-				Model: &wrappers.StringValue{Value: *llm.Provider.Anthropic.Model},
-			},
+			Anthropic: anthropic,
 		}
 		auth = buildTranslatedAuthPolicy(krtctx, &llm.Provider.Anthropic.AuthToken, secrets, be.Namespace)
 	} else if llm.Provider.Gemini != nil {
