@@ -547,7 +547,7 @@ func (s *AgentGwSyncer) buildBackendFromBackendIR(ctx krt.HandlerContext, backen
 	var results []envoyResourceWithCustomName
 	backends, backendPolicies, err := s.translator.BackendTranslator().TranslateBackend(ctx, backendIR, svcCol, secretsCol, nsCol)
 	if err != nil {
-		logger.Error("failed to translate backend", "backend", backendIR.ResourceName(), "error", err)
+		logger.Error("failed to translate backend", "backend", backendIR.Name, "namespace", backendIR.Namespace, "error", err)
 		return results
 	}
 	// handle all backends created as an MCP backend may create multiple backends
