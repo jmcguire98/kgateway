@@ -9,8 +9,10 @@ import (
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/kube/controllers"
 	"istio.io/istio/pkg/kube/krt"
+	isptr "istio.io/istio/pkg/ptr"
 	"istio.io/istio/pkg/slices"
 	"istio.io/istio/pkg/util/protomarshal"
+	"istio.io/istio/pkg/util/sets"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,6 +25,7 @@ import (
 	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
+	agwtranslator "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/translator"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
@@ -112,6 +115,234 @@ func ADPRouteCollection(
 	routes := krt.JoinCollection([]krt.Collection[ADPResourcesForGateway]{httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes}, krtopts.ToOptions("ADPRoutes")...)
 
 	return routes
+}
+
+// ADPRouteCollectionFromRoutesIndex creates the collection of translated routes using the shared RoutesIndex IR
+func ADPRouteCollectionFromRoutesIndex(
+	routes *krtcollections.RoutesIndex,
+	inputs RouteContextInputs,
+	krtopts krtutil.KrtOptions,
+	routeTranslator *agwtranslator.AgentGatewayRouteTranslator,
+) krt.Collection[ADPResourcesForGateway] {
+	// HTTP and GRPC (normalized to HTTPRouteIR via RoutesIndex)
+	httpRoutes := krt.NewManyCollection(routes.HTTPRoutes(), func(krtctx krt.HandlerContext, httpIR pluginsdkir.HttpRouteIR) []ADPResourcesForGateway {
+		ctx := inputs.WithCtx(krtctx)
+		rm := reports.NewReportMap()
+		rep := reports.NewReporter(&rm)
+		routeReporter := rep.Route(httpIR.SourceObject)
+
+		// compute parent refs using existing logic
+		// Build parent refs directly from IR to avoid raw object dependency
+		parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, wellknown.HTTPRouteGVK)
+
+		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(krtctx, httpIR)
+		var gwResult conversionResult[ADPRoute]
+		if err != nil {
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
+		} else {
+			for _, r := range routesOut {
+				gwResult.routes = append(gwResult.routes, ADPRoute{Route: r})
+			}
+		}
+
+		attachedRoutes := buildAttachedRoutesMap(parentRefs)
+		resourcesPerGateway := processParentReferences(
+			parentRefs,
+			gwResult,
+			httpIR.GetName(),
+			routeReporter,
+			func(e ADPRoute, parent routeParentReference) *api.Resource {
+				inner := protomarshal.Clone(e.Route)
+				_, name, _ := strings.Cut(parent.InternalName, "/")
+				inner.ListenerKey = name
+				inner.Key = inner.GetKey() + "." + string(parent.ParentSection)
+				return toADPResource(ADPRoute{Route: inner})
+			},
+		)
+
+		var results []ADPResourcesForGateway
+		for gw, res := range resourcesPerGateway {
+			results = append(results, toResourceWithRoutes(gw, res, attachedRoutes[gw], rm))
+		}
+		return results
+	}, krtopts.ToOptions("ADPHTTPRoutesFromIR")...)
+
+	grpcRoutes := krt.NewManyCollection(routes.AllRoutes(), func(krtctx krt.HandlerContext, wrapper krtcollections.RouteWrapper) []ADPResourcesForGateway {
+		httpIR, ok := wrapper.Route.(*pluginsdkir.HttpRouteIR)
+		if !ok {
+			return nil
+		}
+		ctx := inputs.WithCtx(krtctx)
+		rm := reports.NewReportMap()
+		rep := reports.NewReporter(&rm)
+		routeReporter := rep.Route(httpIR.SourceObject)
+
+		parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, wellknown.HTTPRouteGVK)
+		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(krtctx, *httpIR)
+		var gwResult conversionResult[ADPRoute]
+		if err != nil {
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
+		} else {
+			for _, r := range routesOut {
+				gwResult.routes = append(gwResult.routes, ADPRoute{Route: r})
+			}
+		}
+
+		attachedRoutes := buildAttachedRoutesMap(parentRefs)
+		resourcesPerGateway := processParentReferences(
+			parentRefs, gwResult, httpIR.GetName(), routeReporter,
+			func(e ADPRoute, parent routeParentReference) *api.Resource {
+				inner := protomarshal.Clone(e.Route)
+				_, name, _ := strings.Cut(parent.InternalName, "/")
+				inner.ListenerKey = name
+				inner.Key = inner.GetKey() + "." + string(parent.ParentSection)
+				return toADPResource(ADPRoute{Route: inner})
+			},
+		)
+		var results []ADPResourcesForGateway
+		for gw, res := range resourcesPerGateway {
+			results = append(results, toResourceWithRoutes(gw, res, attachedRoutes[gw], rm))
+		}
+		return results
+	}, krtopts.ToOptions("ADPHttpLikeRoutesFromIR")...)
+
+	tcpRoutes := krt.NewManyCollection(routes.AllRoutes(), func(krtctx krt.HandlerContext, wrapper krtcollections.RouteWrapper) []ADPResourcesForGateway {
+		tcpIR, ok := wrapper.Route.(*pluginsdkir.TcpRouteIR)
+		if !ok {
+			return nil
+		}
+		ctx := inputs.WithCtx(krtctx)
+		rm := reports.NewReportMap()
+		rep := reports.NewReporter(&rm)
+		routeReporter := rep.Route(tcpIR.SourceObject)
+		parentRefs := buildParentReferencesForIR(ctx, tcpIR.ParentRefs, nil, tcpIR.Namespace, wellknown.TCPRouteGVK)
+		tcpOut, _, err := routeTranslator.TranslateTcpRoute(krtctx, *tcpIR)
+		var gwResult conversionResult[ADPTCPRoute]
+		if err != nil {
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
+		} else {
+			for _, r := range tcpOut {
+				gwResult.routes = append(gwResult.routes, ADPTCPRoute{TCPRoute: r})
+			}
+		}
+		attachedRoutes := buildAttachedRoutesMap(parentRefs)
+		resourcesPerGateway := processParentReferences(parentRefs, gwResult, tcpIR.GetName(), routeReporter, func(e ADPTCPRoute, parent routeParentReference) *api.Resource {
+			inner := protomarshal.Clone(e.TCPRoute)
+			_, name, _ := strings.Cut(parent.InternalName, "/")
+			inner.ListenerKey = name
+			inner.Key = inner.GetKey() + "." + string(parent.ParentSection)
+			return toADPResource(ADPTCPRoute{TCPRoute: inner})
+		})
+		var results []ADPResourcesForGateway
+		for gw, res := range resourcesPerGateway {
+			results = append(results, toResourceWithRoutes(gw, res, attachedRoutes[gw], rm))
+		}
+		return results
+	}, krtopts.ToOptions("ADPTCPRoutesFromIR")...)
+
+	tlsRoutes := krt.NewManyCollection(routes.AllRoutes(), func(krtctx krt.HandlerContext, wrapper krtcollections.RouteWrapper) []ADPResourcesForGateway {
+		tlsIR, ok := wrapper.Route.(*pluginsdkir.TlsRouteIR)
+		if !ok {
+			return nil
+		}
+		ctx := inputs.WithCtx(krtctx)
+		rm := reports.NewReportMap()
+		rep := reports.NewReporter(&rm)
+		routeReporter := rep.Route(tlsIR.SourceObject)
+		parentRefs := buildParentReferencesForIR(ctx, tlsIR.ParentRefs, toGWHostnames(tlsIR.Hostnames), tlsIR.Namespace, wellknown.TLSRouteGVK)
+		tlsOut, _, err := routeTranslator.TranslateTlsRoute(krtctx, *tlsIR)
+		var gwResult conversionResult[ADPTCPRoute]
+		if err != nil {
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
+		} else {
+			for _, r := range tlsOut {
+				gwResult.routes = append(gwResult.routes, ADPTCPRoute{TCPRoute: r})
+			}
+		}
+		attachedRoutes := buildAttachedRoutesMap(parentRefs)
+		resourcesPerGateway := processParentReferences(parentRefs, gwResult, tlsIR.GetName(), routeReporter, func(e ADPTCPRoute, parent routeParentReference) *api.Resource {
+			inner := protomarshal.Clone(e.TCPRoute)
+			_, name, _ := strings.Cut(parent.InternalName, "/")
+			inner.ListenerKey = name
+			inner.Key = inner.GetKey() + "." + string(parent.ParentSection)
+			return toADPResource(ADPTCPRoute{TCPRoute: inner})
+		})
+		var results []ADPResourcesForGateway
+		for gw, res := range resourcesPerGateway {
+			results = append(results, toResourceWithRoutes(gw, res, attachedRoutes[gw], rm))
+		}
+		return results
+	}, krtopts.ToOptions("ADPTLSRoutesFromIR")...)
+
+	return krt.JoinCollection([]krt.Collection[ADPResourcesForGateway]{httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes}, krtopts.ToOptions("ADPRoutesFromIR")...)
+}
+
+// buildParentReferencesForIR mirrors extractParentReferenceInfo but takes IR inputs to avoid depending on controllers.Object
+func buildParentReferencesForIR(ctx RouteContext, routeRefs []gwv1.ParentReference, hostnames []gwv1.Hostname, localNamespace string, kind schema.GroupVersionKind) []routeParentReference {
+	var parentRefs []routeParentReference
+	for _, ref := range routeRefs {
+		irKey, err := toInternalParentReference(ref, localNamespace)
+		if err != nil {
+			continue
+		}
+		pk := parentReference{
+			parentKey:   irKey,
+			SectionName: isptr.OrEmpty(ref.SectionName),
+			Port:        isptr.OrEmpty(ref.Port),
+		}
+		currentParents := ctx.RouteParents.fetch(ctx.Krt, irKey)
+		appendParent := func(pr *parentInfo, pk parentReference) {
+			bannedHostnames := sets.New[string]()
+			for _, gw := range currentParents {
+				if gw == pr {
+					continue
+				}
+				if gw.Port != pr.Port {
+					continue
+				}
+				if gw.Protocol != pr.Protocol {
+					continue
+				}
+				bannedHostnames.Insert(gw.OriginalHostname)
+			}
+			deniedReason := referenceAllowed(ctx, pr, kind, pk, hostnames, localNamespace)
+			rpi := routeParentReference{
+				InternalName:      pr.InternalName,
+				InternalKind:      irKey.Kind,
+				Hostname:          pr.OriginalHostname,
+				DeniedReason:      deniedReason,
+				OriginalReference: ref,
+				BannedHostnames:   bannedHostnames, // uses k8s.io/apimachinery/pkg/util/sets like conversion.go
+				ParentKey:         irKey,
+				ParentSection:     pr.SectionName,
+			}
+			parentRefs = append(parentRefs, rpi)
+		}
+		for _, gw := range currentParents {
+			appendParent(gw, pk)
+		}
+	}
+	// Ensure stable order
+	slices.SortBy(parentRefs, func(a routeParentReference) string { return parentRefString(a.OriginalReference) })
+	return parentRefs
+}
+
+func toGWHostnames(in []string) []gwv1.Hostname {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]gwv1.Hostname, len(in))
+	for i, s := range in {
+		out[i] = gwv1.Hostname(s)
+	}
+	return out
+}
+
+func defaultInt32(v *gwv1.PortNumber, def gwv1.PortNumber) gwv1.PortNumber {
+	if v == nil {
+		return def
+	}
+	return *v
 }
 
 // buildAttachedRoutesMap builds a map of gateway -> section name -> route count
