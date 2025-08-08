@@ -118,15 +118,28 @@ func (t *AgentGatewayRouteTranslator) TranslateTcpRoute(
 		RouteName: fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
 		RuleName:  "",
 	}
+	// Backend-level policy application mirrors HTTP backend policy order
 	for _, be := range routeIR.Backends {
 		if be.BackendObject == nil {
 			continue
 		}
-		r.Backends = append(r.Backends, &api.RouteBackend{
+		rb := &api.RouteBackend{
 			Weight:  int32(be.Weight),
 			Backend: &api.BackendReference{Kind: &api.BackendReference_Backend{Backend: be.BackendObject.Namespace + "/" + be.BackendObject.Name}},
-		})
+		}
+		r.Backends = append(r.Backends, rb)
+		// For TCP, we only have route-level AttachedPolicies on the route itself (no per-match),
+		// so run any route-backend policies using a minimal context.
+		beCtx := &agwir.AgentGatewayTranslationBackendContext{Backend: be.BackendObject}
+		// Construct a minimal HttpRouteRuleMatchIR equivalent for ordering (no ExtensionRefs/Match)
+		matchIR := pluginsdkir.HttpRouteRuleMatchIR{
+			AttachedPolicies: routeIR.AttachedPolicies,
+		}
+		if err := t.runRouteBackendPolicies(&matchIR, beCtx); err != nil {
+			return nil, nil, err
+		}
 	}
+	// If we decide to support TCP route-level policies at some point, they would go here
 	out = append(out, r)
 	return out, polsOut, nil
 }
@@ -147,11 +160,20 @@ func (t *AgentGatewayRouteTranslator) TranslateTlsRoute(
 		if be.BackendObject == nil {
 			continue
 		}
-		r.Backends = append(r.Backends, &api.RouteBackend{
+		rb := &api.RouteBackend{
 			Weight:  int32(be.Weight),
 			Backend: &api.BackendReference{Kind: &api.BackendReference_Backend{Backend: be.BackendObject.Namespace + "/" + be.BackendObject.Name}},
-		})
+		}
+		r.Backends = append(r.Backends, rb)
+		beCtx := &agwir.AgentGatewayTranslationBackendContext{Backend: be.BackendObject}
+		matchIR := pluginsdkir.HttpRouteRuleMatchIR{
+			AttachedPolicies: routeIR.AttachedPolicies,
+		}
+		if err := t.runRouteBackendPolicies(&matchIR, beCtx); err != nil {
+			return nil, nil, err
+		}
 	}
+	// TLS route-level policies (non-backend) would be applied here if/when defined for agent-gateway
 	out = append(out, r)
 	return out, polsOut, nil
 }
