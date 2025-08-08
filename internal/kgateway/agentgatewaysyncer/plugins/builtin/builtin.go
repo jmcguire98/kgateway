@@ -10,7 +10,6 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 	reportssdk "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
@@ -20,7 +19,7 @@ func NewBuiltinPlugin() pluginsdk.Plugin {
 	return pluginsdk.Plugin{
 		ContributesPolicies: map[schema.GroupKind]pluginsdk.PolicyPlugin{
 			ir.VirtualBuiltInGK: {
-				NewAgentGatewayPass: func(reporter reportssdk.Reporter) agwir.AgentGatewayTranslationPass {
+				NewAgentGatewayPass: func(reporter reportssdk.Reporter) ir.AgentGatewayTranslationPass {
 					return NewPass()
 				},
 			},
@@ -28,10 +27,8 @@ func NewBuiltinPlugin() pluginsdk.Plugin {
 	}
 }
 
-// Pass implements the agwir.AgentGatewayTranslationPass interface.
-type Pass struct {
-	agwir.UnimplementedAgentGatewayTranslationPass
-}
+// Pass implements the ir.AgentGatewayTranslationPass interface.
+type Pass struct{}
 
 // NewPass creates a new Pass.
 func NewPass() *Pass {
@@ -39,7 +36,7 @@ func NewPass() *Pass {
 }
 
 // ApplyForRoute applies the builtin transformations for the given route.
-func (p *Pass) ApplyForRoute(pctx *agwir.AgentGatewayRouteContext, route *api.Route) error {
+func (p *Pass) ApplyForRoute(pctx *ir.AgentGatewayRouteContext, route *api.Route) error {
 	var errs []error
 	err := applyTimeouts(pctx.Rule, route)
 	if err != nil {

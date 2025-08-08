@@ -75,12 +75,7 @@ func (w *testingWriter) Write(p []byte) (n int, err error) {
 	w.RLock()
 	defer w.RUnlock()
 
-	// Check if we have a valid test context before trying to log
-	// This prevents races when controller goroutines outlive the test
-	if w.t != nil {
-		w.t.Log(string(p)) // Write the log to testing.T
-	}
-	// Always return success to avoid breaking the logging chain
+	w.t.Log(string(p)) // Write the log to testing.T
 	return len(p), nil
 }
 

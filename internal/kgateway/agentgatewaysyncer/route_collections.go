@@ -21,7 +21,6 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
-	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
@@ -291,8 +290,8 @@ func IsNil[O comparable](o O) bool {
 
 func newAgentGatewayPasses(plugs pluginsdk.Plugin,
 	rep reporter.Reporter,
-	aps pluginsdkir.AttachedPolicies) []agwir.AgentGatewayTranslationPass {
-	var out []agwir.AgentGatewayTranslationPass
+	aps pluginsdkir.AttachedPolicies) []pluginsdkir.AgentGatewayTranslationPass {
+	var out []pluginsdkir.AgentGatewayTranslationPass
 	if len(aps.Policies) == 0 {
 		return out
 	}
@@ -346,7 +345,7 @@ type RouteContext struct {
 	Krt krt.HandlerContext
 	RouteContextInputs
 	AttachedPolicies pluginsdkir.AttachedPolicies
-	pluginPasses     []agwir.AgentGatewayTranslationPass
+	pluginPasses     []pluginsdkir.AgentGatewayTranslationPass
 }
 
 type RouteContextInputs struct {
