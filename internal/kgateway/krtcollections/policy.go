@@ -906,6 +906,11 @@ func (r *RoutesIndex) HTTPRoutes() krt.Collection[ir.HttpRouteIR] {
 	return r.httpRoutes
 }
 
+// AllRoutes returns the joined collection of all route types wrapped as RouteWrapper.
+func (r *RoutesIndex) AllRoutes() krt.Collection[RouteWrapper] {
+	return r.routes
+}
+
 func NewRoutesIndex(
 	krtopts krtutil.KrtOptions,
 	httproutes krt.Collection[*gwv1.HTTPRoute],
