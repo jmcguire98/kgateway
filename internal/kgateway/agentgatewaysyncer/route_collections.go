@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
@@ -32,96 +31,11 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/reports"
 )
 
-// ADPRouteCollection creates the collection of translated routes
-func ADPRouteCollection(
-	httpRouteCol krt.Collection[*gwv1.HTTPRoute],
-	grpcRouteCol krt.Collection[*gwv1.GRPCRoute],
-	tcpRouteCol krt.Collection[*gwv1alpha2.TCPRoute],
-	tlsRouteCol krt.Collection[*gwv1alpha2.TLSRoute],
-	inputs RouteContextInputs,
-	krtopts krtinternal.KrtOptions,
-	plugins pluginsdk.Plugin,
-) krt.Collection[ADPResourcesForGateway] {
-	// TODO(npolshak): look into using RouteIndex instead of raw collections to support targetRefs: https://github.com/kgateway-dev/kgateway/issues/11838
-	httpRoutes := createRouteCollection(httpRouteCol, inputs, krtopts, plugins, "ADPHTTPRoutes",
-		func(ctx RouteContext, obj *gwv1.HTTPRoute, rep reporter.Reporter) (RouteContext, iter.Seq2[ADPRoute, *reporter.RouteCondition]) {
-			// HTTP-specific preprocessing: attach policies and setup plugins
-			attachRoutePolicies(&ctx, obj)
-			ctx.pluginPasses = newAgentGatewayPasses(plugins, rep, ctx.AttachedPolicies)
-
-			route := obj.Spec
-			return ctx, func(yield func(ADPRoute, *reporter.RouteCondition) bool) {
-				for n, r := range route.Rules {
-					// split the rule to make sure each rule has up to one match
-					matches := slices.Reference(r.Matches)
-					if len(matches) == 0 {
-						matches = append(matches, nil)
-					}
-					for idx, m := range matches {
-						if m != nil {
-							r.Matches = []gwv1.HTTPRouteMatch{*m}
-						}
-						res, err := convertHTTPRouteToADP(ctx, r, obj, n, idx)
-						if !yield(ADPRoute{Route: res}, err) {
-							return
-						}
-					}
-				}
-			}
-		})
-
-	grpcRoutes := createRouteCollection(grpcRouteCol, inputs, krtopts, plugins, "ADPGRPCRoutes",
-		func(ctx RouteContext, obj *gwv1.GRPCRoute, rep reporter.Reporter) (RouteContext, iter.Seq2[ADPRoute, *reporter.RouteCondition]) {
-			route := obj.Spec
-			return ctx, func(yield func(ADPRoute, *reporter.RouteCondition) bool) {
-				for n, r := range route.Rules {
-					// Convert the entire rule with all matches at once
-					res, err := convertGRPCRouteToADP(ctx, r, obj, n)
-					if !yield(ADPRoute{Route: res}, err) {
-						return
-					}
-				}
-			}
-		})
-
-	tcpRoutes := createTCPRouteCollection(tcpRouteCol, inputs, krtopts, plugins, "ADPTCPRoutes",
-		func(ctx RouteContext, obj *gwv1alpha2.TCPRoute, rep reporter.Reporter) (RouteContext, iter.Seq2[ADPTCPRoute, *reporter.RouteCondition]) {
-			route := obj.Spec
-			return ctx, func(yield func(ADPTCPRoute, *reporter.RouteCondition) bool) {
-				for n, r := range route.Rules {
-					// Convert the entire rule with all matches at once
-					res, err := convertTCPRouteToADP(ctx, r, obj, n)
-					if !yield(ADPTCPRoute{TCPRoute: res}, err) {
-						return
-					}
-				}
-			}
-		})
-
-	tlsRoutes := createTCPRouteCollection(tlsRouteCol, inputs, krtopts, plugins, "ADPTLSRoutes",
-		func(ctx RouteContext, obj *gwv1alpha2.TLSRoute, rep reporter.Reporter) (RouteContext, iter.Seq2[ADPTCPRoute, *reporter.RouteCondition]) {
-			route := obj.Spec
-			return ctx, func(yield func(ADPTCPRoute, *reporter.RouteCondition) bool) {
-				for n, r := range route.Rules {
-					// Convert the entire rule with all matches at once
-					res, err := convertTLSRouteToADP(ctx, r, obj, n)
-					if !yield(ADPTCPRoute{TCPRoute: res}, err) {
-						return
-					}
-				}
-			}
-		})
-
-	routes := krt.JoinCollection([]krt.Collection[ADPResourcesForGateway]{httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes}, krtopts.ToOptions("ADPRoutes")...)
-
-	return routes
-}
-
 // ADPRouteCollectionFromRoutesIndex creates the collection of translated routes using the shared RoutesIndex IR
 func ADPRouteCollectionFromRoutesIndex(
 	routes *krtcollections.RoutesIndex,
 	inputs RouteContextInputs,
-	krtopts krtutil.KrtOptions,
+	krtopts krtinternal.KrtOptions,
 	routeTranslator *agwtranslator.AgentGatewayRouteTranslator,
 ) krt.Collection[ADPResourcesForGateway] {
 	// HTTP and GRPC (normalized to HTTPRouteIR via RoutesIndex)
@@ -135,7 +49,7 @@ func ADPRouteCollectionFromRoutesIndex(
 		// Build parent refs directly from IR to avoid raw object dependency
 		parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, wellknown.HTTPRouteGVK)
 
-		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(krtctx, httpIR)
+		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(httpIR)
 		var gwResult conversionResult[ADPRoute]
 		if err != nil {
 			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
@@ -178,7 +92,7 @@ func ADPRouteCollectionFromRoutesIndex(
 		routeReporter := rep.Route(httpIR.SourceObject)
 
 		parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, wellknown.HTTPRouteGVK)
-		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(krtctx, *httpIR)
+		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(*httpIR)
 		var gwResult conversionResult[ADPRoute]
 		if err != nil {
 			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
@@ -216,7 +130,7 @@ func ADPRouteCollectionFromRoutesIndex(
 		rep := reports.NewReporter(&rm)
 		routeReporter := rep.Route(tcpIR.SourceObject)
 		parentRefs := buildParentReferencesForIR(ctx, tcpIR.ParentRefs, nil, tcpIR.Namespace, wellknown.TCPRouteGVK)
-		tcpOut, _, err := routeTranslator.TranslateTcpRoute(krtctx, *tcpIR)
+		tcpOut, _, err := routeTranslator.TranslateTcpRoute(*tcpIR)
 		var gwResult conversionResult[ADPTCPRoute]
 		if err != nil {
 			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
@@ -250,7 +164,7 @@ func ADPRouteCollectionFromRoutesIndex(
 		rep := reports.NewReporter(&rm)
 		routeReporter := rep.Route(tlsIR.SourceObject)
 		parentRefs := buildParentReferencesForIR(ctx, tlsIR.ParentRefs, toGWHostnames(tlsIR.Hostnames), tlsIR.Namespace, wellknown.TLSRouteGVK)
-		tlsOut, _, err := routeTranslator.TranslateTlsRoute(krtctx, *tlsIR)
+		tlsOut, _, err := routeTranslator.TranslateTlsRoute(*tlsIR)
 		var gwResult conversionResult[ADPTCPRoute]
 		if err != nil {
 			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}

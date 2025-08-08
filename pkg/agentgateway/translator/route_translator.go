@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/agentgateway/agentgateway/go/api"
-	"istio.io/istio/pkg/kube/krt"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -31,7 +30,6 @@ func NewAgentGatewayRouteTranslator(extensions extensionsplug.Plugin) *AgentGate
 // TranslateHttpLikeRoute translates an HttpRouteIR (including GRPC-as-HTTP) to agent gateway Route resources.
 // Implementation will be added in subsequent edits as we wire RouteIndex into the syncer.
 func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
-	ctx krt.HandlerContext,
 	routeIR pluginsdkir.HttpRouteIR,
 ) ([]*api.Route, []*api.Policy, error) {
 	var routesOut []*api.Route
@@ -90,7 +88,7 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 					Parent:           &routeIR,
 					Match:            match,
 				}
-				if err := t.runRouteBackendPolicies(ctx, &matchIR, beCtx); err != nil {
+				if err := t.runRouteBackendPolicies(&matchIR, beCtx); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -100,7 +98,7 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 				Parent:           &routeIR,
 				Match:            match,
 			}
-			if err := t.runRoutePolicies(ctx, &matchIR, r); err != nil {
+			if err := t.runRoutePolicies(&matchIR, r); err != nil {
 				return nil, nil, err
 			}
 			routesOut = append(routesOut, r)
@@ -112,7 +110,6 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 // TranslateTcpRoute translates a TcpRouteIR to agent gateway TCPRoute resources.
 // Implementation will be added in subsequent edits as we wire RouteIndex into the syncer.
 func (t *AgentGatewayRouteTranslator) TranslateTcpRoute(
-	_ krt.HandlerContext,
 	routeIR pluginsdkir.TcpRouteIR,
 ) ([]*api.TCPRoute, []*api.Policy, error) {
 	var out []*api.TCPRoute
@@ -137,7 +134,6 @@ func (t *AgentGatewayRouteTranslator) TranslateTcpRoute(
 // TranslateTlsRoute translates a TlsRouteIR to agent gateway TCPRoute resources (TLS is TCP-level here).
 // Implementation will be added in subsequent edits as we wire RouteIndex into the syncer.
 func (t *AgentGatewayRouteTranslator) TranslateTlsRoute(
-	_ krt.HandlerContext,
 	routeIR pluginsdkir.TlsRouteIR,
 ) ([]*api.TCPRoute, []*api.Policy, error) {
 	var out []*api.TCPRoute
@@ -161,7 +157,7 @@ func (t *AgentGatewayRouteTranslator) TranslateTlsRoute(
 }
 
 // runRoutePolicies applies policy passes to a single HttpRouteRuleMatchIR producing agent route fields.
-func (t *AgentGatewayRouteTranslator) runRoutePolicies(_ krt.HandlerContext, in *pluginsdkir.HttpRouteRuleMatchIR, out *api.Route) error {
+func (t *AgentGatewayRouteTranslator) runRoutePolicies(in *pluginsdkir.HttpRouteRuleMatchIR, out *api.Route) error {
 	var errs []error
 	var ordered pluginsdkir.AttachedPolicies
 	ordered.Append(in.ExtensionRefs, in.AttachedPolicies)
@@ -205,7 +201,7 @@ func (t *AgentGatewayRouteTranslator) runRoutePolicies(_ krt.HandlerContext, in 
 }
 
 // runRouteBackendPolicies applies policies attached to a specific backend referenced by the route match.
-func (t *AgentGatewayRouteTranslator) runRouteBackendPolicies(_ krt.HandlerContext, in *pluginsdkir.HttpRouteRuleMatchIR, beCtx *agwir.AgentGatewayTranslationBackendContext) error {
+func (t *AgentGatewayRouteTranslator) runRouteBackendPolicies(in *pluginsdkir.HttpRouteRuleMatchIR, beCtx *agwir.AgentGatewayTranslationBackendContext) error {
 	var errs []error
 	for gk, pols := range in.AttachedPolicies.Policies {
 		plugin, ok := t.ContributedPolicies[gk]

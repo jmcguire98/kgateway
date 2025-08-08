@@ -499,7 +499,7 @@ func (s *AgentGwSyncer) buildADPResources(
 		return s.buildListenerFromGateway(obj)
 	}, krtopts.ToOptions("Listeners")...)
 
-	// Build routes
+	// Build routes from IR using RoutesIndex (Envoy parity)
 	routeParents := BuildRouteParents(gateways)
 	routeInputs := RouteContextInputs{
 		Grants:          refGrants,
@@ -511,7 +511,12 @@ func (s *AgentGwSyncer) buildADPResources(
 		Plugins:         s.plugins,
 		DirectResponses: inputs.DirectResponses,
 	}
-	adpRoutes := ADPRouteCollection(inputs.HTTPRoutes, inputs.GRPCRoutes, inputs.TCPRoutes, inputs.TLSRoutes, routeInputs, krtopts, s.plugins)
+	adpRoutes := ADPRouteCollectionFromRoutesIndex(
+		s.commonCols.Routes,
+		routeInputs,
+		krtopts,
+		s.translator.RouteTranslator(),
+	)
 
 	adpPolicies := ADPPolicyCollection(inputs, binds, krtopts)
 

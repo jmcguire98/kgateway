@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	networkingclient "istio.io/client-go/pkg/apis/networking/v1"
-	"istio.io/istio/pkg/kube/krt/krttest"
+	krttest "istio.io/istio/pkg/kube/krt/krttest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,9 +19,14 @@ import (
 	gwv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
+	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
-	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
+	agwtranslator "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/translator"
+
+	// removed: collections.NewCommonCollections; tests construct minimal indices directly
+	"github.com/kgateway-dev/kgateway/v2/pkg/settings"
 )
 
 var (
@@ -850,7 +855,12 @@ func TestADPRouteCollection(t *testing.T) {
 			krtopts := krtinternal.KrtOptions{}
 
 			// Call ADPRouteCollection
-			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, pluginsdk.Plugin{})
+			// Do not build a krtcollections.RefGrantIndex here; tests use the agent gateway specific ReferenceGrants wrapper.
+			// Pass nil for refgrants to NewBackendIndex/NewRoutesIndex.
+			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
+			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
+			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
+			adpRoutes := ADPRouteCollectionFromRoutesIndex(routesIdx, routeInputs, krtopts, agwtranslator.NewAgentGatewayRouteTranslator(extensionsplug.Plugin{}))
 
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())
@@ -1458,7 +1468,10 @@ func TestADPRouteCollectionGRPC(t *testing.T) {
 			krtopts := krtinternal.KrtOptions{}
 
 			// Call ADPRouteCollection
-			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, pluginsdk.Plugin{})
+			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
+			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
+			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
+			adpRoutes := ADPRouteCollectionFromRoutesIndex(routesIdx, routeInputs, krtopts, agwtranslator.NewAgentGatewayRouteTranslator(extensionsplug.Plugin{}))
 
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())
@@ -1904,7 +1917,10 @@ func TestADPRouteCollectionWithFilters(t *testing.T) {
 			krtopts := krtinternal.KrtOptions{}
 
 			// Call ADPRouteCollection
-			adpRoutes := ADPRouteCollection(httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, routeInputs, krtopts, pluginsdk.Plugin{})
+			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
+			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
+			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
+			adpRoutes := ADPRouteCollectionFromRoutesIndex(routesIdx, routeInputs, krtopts, agwtranslator.NewAgentGatewayRouteTranslator(extensionsplug.Plugin{}))
 
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())
