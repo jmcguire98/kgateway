@@ -11,16 +11,19 @@ type AgentGatewayTranslator struct {
 	extensions        extensionsplug.Plugin
 	backendTranslator *AgentGatewayBackendTranslator
 	routeTranslator   *AgentGatewayRouteTranslator
+	agentGatewayClass string
 }
 
 // NewAgentGatewayTranslator creates a new AgentGatewayTranslator
 func NewAgentGatewayTranslator(
 	commonCols *common.CommonCollections,
 	extensions extensionsplug.Plugin,
+	agentGatewayClassName string,
 ) *AgentGatewayTranslator {
 	return &AgentGatewayTranslator{
-		commonCols: commonCols,
-		extensions: extensions,
+		commonCols:        commonCols,
+		extensions:        extensions,
+		agentGatewayClass: agentGatewayClassName,
 	}
 }
 
@@ -28,6 +31,7 @@ func NewAgentGatewayTranslator(
 func (s *AgentGatewayTranslator) Init() {
 	s.backendTranslator = NewAgentGatewayBackendTranslator(s.extensions)
 	s.routeTranslator = NewAgentGatewayRouteTranslator(s.extensions)
+	s.routeTranslator.GatewayClassName = s.agentGatewayClass
 }
 
 // BackendTranslator returns the initialized backend translator on the AgentGatewayTranslator receiver

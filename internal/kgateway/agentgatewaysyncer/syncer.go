@@ -153,7 +153,7 @@ func NewAgentGwSyncer(
 		controllerName:        controllerName,
 		agentGatewayClassName: agentGatewayClassName,
 		plugins:               plugins,
-		translator:            translator.NewAgentGatewayTranslator(commonCols, plugins),
+		translator:            translator.NewAgentGatewayTranslator(commonCols, plugins, agentGatewayClassName),
 		xdsCache:              xdsCache,
 		client:                client,
 		mgr:                   mgr,

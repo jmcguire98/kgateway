@@ -21,6 +21,7 @@ import (
 type AgentGatewayRouteTranslator struct {
 	// ContributedPolicies maps policy GKs to agent-gateway translation passes
 	ContributedPolicies map[schema.GroupKind]extensionsplug.PolicyPlugin
+	GatewayClassName    string
 }
 
 // NewAgentGatewayRouteTranslator creates a new AgentGatewayRouteTranslator
@@ -31,9 +32,9 @@ func NewAgentGatewayRouteTranslator(extensions extensionsplug.Plugin) *AgentGate
 }
 
 // TranslateHttpLikeRoute translates an HttpRouteIR (including GRPC-as-HTTP) to agent gateway Route resources.
-// Implementation will be added in subsequent edits as we wire RouteIndex into the syncer.
 func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 	routeIR pluginsdkir.HttpRouteIR,
+	passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass,
 ) ([]*api.Route, []*api.Policy, error) {
 	var routesOut []*api.Route
 	var polsOut []*api.Policy
@@ -97,7 +98,7 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 					Parent:           &routeIR,
 					Match:            match,
 				}
-				if err := t.runRouteBackendPolicies(&matchIR, beCtx); err != nil {
+				if err := t.runRouteBackendPolicies(passes, &matchIR, beCtx); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -107,10 +108,9 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 				Parent:           &routeIR,
 				Match:            match,
 			}
-			if err := t.runRoutePolicies(&matchIR, r); err != nil {
+			if err := t.runRoutePolicies(passes, &matchIR, r); err != nil {
 				return nil, nil, err
 			}
-			// Note: timeouts/retries are applied by the builtin AGW plugin via ApplyForRoute using IR on pctx
 			routesOut = append(routesOut, r)
 		}
 	}
@@ -121,9 +121,9 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 }
 
 // TranslateTcpRoute translates a TcpRouteIR to agent gateway TCPRoute resources.
-// Implementation will be added in subsequent edits as we wire RouteIndex into the syncer.
 func (t *AgentGatewayRouteTranslator) TranslateTcpRoute(
 	routeIR pluginsdkir.TcpRouteIR,
+	passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass,
 ) ([]*api.TCPRoute, []*api.Policy, error) {
 	var out []*api.TCPRoute
 	var polsOut []*api.Policy
@@ -148,7 +148,7 @@ func (t *AgentGatewayRouteTranslator) TranslateTcpRoute(
 		matchIR := pluginsdkir.HttpRouteRuleMatchIR{
 			AttachedPolicies: routeIR.AttachedPolicies,
 		}
-		if err := t.runRouteBackendPolicies(&matchIR, beCtx); err != nil {
+		if err := t.runRouteBackendPolicies(passes, &matchIR, beCtx); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -158,9 +158,9 @@ func (t *AgentGatewayRouteTranslator) TranslateTcpRoute(
 }
 
 // TranslateTlsRoute translates a TlsRouteIR to agent gateway TCPRoute resources (TLS is TCP-level here).
-// Implementation will be added in subsequent edits as we wire RouteIndex into the syncer.
 func (t *AgentGatewayRouteTranslator) TranslateTlsRoute(
 	routeIR pluginsdkir.TlsRouteIR,
+	passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass,
 ) ([]*api.TCPRoute, []*api.Policy, error) {
 	var out []*api.TCPRoute
 	var polsOut []*api.Policy
@@ -182,7 +182,7 @@ func (t *AgentGatewayRouteTranslator) TranslateTlsRoute(
 		matchIR := pluginsdkir.HttpRouteRuleMatchIR{
 			AttachedPolicies: routeIR.AttachedPolicies,
 		}
-		if err := t.runRouteBackendPolicies(&matchIR, beCtx); err != nil {
+		if err := t.runRouteBackendPolicies(passes, &matchIR, beCtx); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -191,43 +191,56 @@ func (t *AgentGatewayRouteTranslator) TranslateTlsRoute(
 	return out, polsOut, nil
 }
 
-// runRoutePolicies applies policy passes to a single HttpRouteRuleMatchIR producing agent route fields.
-func (t *AgentGatewayRouteTranslator) runRoutePolicies(in *pluginsdkir.HttpRouteRuleMatchIR, out *api.Route) error {
-	var errs []error
-	var ordered pluginsdkir.AttachedPolicies
-	ordered.Append(in.ExtensionRefs, in.AttachedPolicies)
+// runRoutePlugins applies policy passes to a single HttpRouteRuleMatchIR producing agentgateway route fields.
+func (t *AgentGatewayRouteTranslator) runRoutePolicies(passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass, in *pluginsdkir.HttpRouteRuleMatchIR, out *api.Route) error {
+	var orderedAttachedPolicies pluginsdkir.AttachedPolicies
+
+	// rule-level policies in priority order (high to low)
+	orderedAttachedPolicies.Append(in.ExtensionRefs, in.AttachedPolicies)
+
+	// route-level policy
 	if in.Parent != nil {
-		ordered.Append(in.Parent.AttachedPolicies)
+		orderedAttachedPolicies.Append(in.Parent.AttachedPolicies)
 	}
+
+	// delegation-level policies in priority order (high to low)
 	hierarchicalPriority := 0
 	delegatingParent := in.DelegatingParent
 	for delegatingParent != nil {
+		// parent policies are lower in priority by default, so mark them with their relative priority
 		hierarchicalPriority--
-		ordered.AppendWithPriority(hierarchicalPriority,
+		orderedAttachedPolicies.AppendWithPriority(hierarchicalPriority,
 			delegatingParent.ExtensionRefs, delegatingParent.AttachedPolicies, delegatingParent.Parent.AttachedPolicies)
 		delegatingParent = delegatingParent.DelegatingParent
 	}
-	for gk, pols := range ordered.Policies {
+
+	var errs []error
+	for _, gk := range orderedAttachedPolicies.ApplyOrderedGroupKinds() {
+		pols := orderedAttachedPolicies.Policies[gk]
+		pass := passes[gk]
+
 		plugin, ok := t.ContributedPolicies[gk]
-		if !ok || plugin.NewAgentGatewayPass == nil {
+		if !ok || pass == nil {
 			continue
 		}
-		pass := plugin.NewAgentGatewayPass(nil)
-		if plugin.MergePolicies != nil {
-			merged := plugin.MergePolicies(pols)
-			if len(merged.Errors) > 0 {
-				errs = append(errs, merged.Errors...)
-			} else if err := pass.ApplyForRoute(&pluginsdkir.RouteContext{In: *in}, out); err != nil {
-				errs = append(errs, err)
-			}
-			continue
+
+		pctx := &pluginsdkir.RouteContext{
+			In:     *in,
+			Policy: pols[0].PolicyIr,
+			GatewayContext: pluginsdkir.GatewayContext{
+				GatewayClassName: t.GatewayClassName,
+			},
 		}
-		for _, pa := range pols {
-			if len(pa.Errors) > 0 {
-				errs = append(errs, pa.Errors...)
+
+		mergedPols := mergePolicies(plugin, pols)
+		for _, policyAtt := range mergedPols {
+			pctx.InheritedPolicyPriority = policyAtt.InheritedPolicyPriority
+			if len(policyAtt.Errors) > 0 {
+				errs = append(errs, policyAtt.Errors...)
 				continue
 			}
-			if err := pass.ApplyForRoute(&pluginsdkir.RouteContext{In: *in}, out); err != nil {
+			pctx.Policy = policyAtt.PolicyIr
+			if err := pass.ApplyForRoute(pctx, out); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -236,24 +249,25 @@ func (t *AgentGatewayRouteTranslator) runRoutePolicies(in *pluginsdkir.HttpRoute
 }
 
 // runRouteBackendPolicies applies policies attached to a specific backend referenced by the route match.
-func (t *AgentGatewayRouteTranslator) runRouteBackendPolicies(in *pluginsdkir.HttpRouteRuleMatchIR, beCtx *agwir.AgentGatewayTranslationBackendContext) error {
+func (t *AgentGatewayRouteTranslator) runRouteBackendPolicies(
+	passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass,
+	in *pluginsdkir.HttpRouteRuleMatchIR,
+	beCtx *agwir.AgentGatewayTranslationBackendContext,
+) error {
 	var errs []error
 	for gk, pols := range in.AttachedPolicies.Policies {
 		plugin, ok := t.ContributedPolicies[gk]
-		if !ok || plugin.NewAgentGatewayPass == nil {
+		if !ok {
 			continue
 		}
-		pass := plugin.NewAgentGatewayPass(nil)
-		if plugin.MergePolicies != nil {
-			merged := plugin.MergePolicies(pols)
-			if len(merged.Errors) > 0 {
-				errs = append(errs, merged.Errors...)
-			} else if err := pass.ApplyForRouteBackend(merged.PolicyIr, beCtx); err != nil {
-				errs = append(errs, err)
-			}
+
+		pass := passes[gk]
+		if pass == nil {
 			continue
 		}
-		for _, pa := range pols {
+
+		mergedPols := mergePolicies(plugin, pols)
+		for _, pa := range mergedPols {
 			if len(pa.Errors) > 0 {
 				errs = append(errs, pa.Errors...)
 				continue
@@ -264,6 +278,15 @@ func (t *AgentGatewayRouteTranslator) runRouteBackendPolicies(in *pluginsdkir.Ht
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// if plugin.MergePolicies is nil, return pols; else return a single merged PolicyAtt slice
+func mergePolicies(plugin extensionsplug.PolicyPlugin, pols []pluginsdkir.PolicyAtt) []pluginsdkir.PolicyAtt {
+	if plugin.MergePolicies == nil {
+		return pols
+	}
+	merged := plugin.MergePolicies(pols)
+	return []pluginsdkir.PolicyAtt{merged}
 }
 
 // buildHttpRouteMatch converts gwv1.HTTPRouteMatch to api.RouteMatch

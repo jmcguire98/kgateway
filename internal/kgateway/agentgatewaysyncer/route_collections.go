@@ -50,7 +50,8 @@ func ADPRouteCollectionFromRoutesIndex(
 		// Build parent refs directly from IR to avoid raw object dependency
 		parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, wellknown.HTTPRouteGVK)
 
-		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(httpIR)
+		passes := newAgentGatewayPasses(inputs.Plugins, rep, httpIR.AttachedPolicies)
+		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(httpIR, passes)
 		var gwResult conversionResult[ADPRoute]
 		if err != nil {
 			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
@@ -93,7 +94,8 @@ func ADPRouteCollectionFromRoutesIndex(
 		routeReporter := rep.Route(httpIR.SourceObject)
 
 		parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, wellknown.HTTPRouteGVK)
-		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(*httpIR)
+		passes := newAgentGatewayPasses(inputs.Plugins, rep, httpIR.AttachedPolicies)
+		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(*httpIR, passes)
 		var gwResult conversionResult[ADPRoute]
 		if err != nil {
 			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
@@ -131,7 +133,8 @@ func ADPRouteCollectionFromRoutesIndex(
 		rep := reports.NewReporter(&rm)
 		routeReporter := rep.Route(tcpIR.SourceObject)
 		parentRefs := buildParentReferencesForIR(ctx, tcpIR.ParentRefs, nil, tcpIR.Namespace, wellknown.TCPRouteGVK)
-		tcpOut, _, err := routeTranslator.TranslateTcpRoute(*tcpIR)
+		passes := newAgentGatewayPasses(inputs.Plugins, rep, tcpIR.AttachedPolicies)
+		tcpOut, _, err := routeTranslator.TranslateTcpRoute(*tcpIR, passes)
 		var gwResult conversionResult[ADPTCPRoute]
 		if err != nil {
 			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
@@ -165,7 +168,8 @@ func ADPRouteCollectionFromRoutesIndex(
 		rep := reports.NewReporter(&rm)
 		routeReporter := rep.Route(tlsIR.SourceObject)
 		parentRefs := buildParentReferencesForIR(ctx, tlsIR.ParentRefs, toGWHostnames(tlsIR.Hostnames), tlsIR.Namespace, wellknown.TLSRouteGVK)
-		tlsOut, _, err := routeTranslator.TranslateTlsRoute(*tlsIR)
+		passes := newAgentGatewayPasses(inputs.Plugins, rep, tlsIR.AttachedPolicies)
+		tlsOut, _, err := routeTranslator.TranslateTlsRoute(*tlsIR, passes)
 		var gwResult conversionResult[ADPTCPRoute]
 		if err != nil {
 			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
@@ -438,8 +442,8 @@ func IsNil[O comparable](o O) bool {
 
 func newAgentGatewayPasses(plugs pluginsdk.Plugin,
 	rep reporter.Reporter,
-	aps pluginsdkir.AttachedPolicies) []agwir.AgentGatewayTranslationPass {
-	var out []agwir.AgentGatewayTranslationPass
+	aps pluginsdkir.AttachedPolicies) map[schema.GroupKind]agwir.AgentGatewayTranslationPass {
+	out := map[schema.GroupKind]agwir.AgentGatewayTranslationPass{}
 	if len(aps.Policies) == 0 {
 		return out
 	}
@@ -448,12 +452,10 @@ func newAgentGatewayPasses(plugs pluginsdk.Plugin,
 		if !ok || plugin.NewAgentGatewayPass == nil {
 			continue
 		}
-		// only instantiate if there is at least one attached policy
-		// OR this is the synthetic built-in GK
 		if len(paList) == 0 && gk != pluginsdkir.VirtualBuiltInGK {
 			continue
 		}
-		out = append(out, plugin.NewAgentGatewayPass(rep))
+		out[gk] = plugin.NewAgentGatewayPass(rep)
 	}
 	return out
 }
