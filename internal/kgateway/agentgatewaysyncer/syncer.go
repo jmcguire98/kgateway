@@ -44,6 +44,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/query"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -510,6 +511,7 @@ func (s *AgentGwSyncer) buildADPResources(
 		Backends:        s.commonCols.BackendIndex,
 		Plugins:         s.plugins,
 		DirectResponses: inputs.DirectResponses,
+		Queries:         query.NewData(s.commonCols),
 	}
 	adpRoutes := ADPRouteCollectionFromRoutesIndex(
 		s.commonCols.Routes,

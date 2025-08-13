@@ -28,52 +28,55 @@ func NewAgentGatewayRouteTranslator(extensions extensionsplug.Plugin) *AgentGate
 	}
 }
 
-// TranslateHttpLikeRoute translates an HttpRouteIR (including GRPC-as-HTTP) to agent gateway Route resources.
-func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
+// TranslateHttpMatches translates a list of precomputed HttpRouteRuleMatchIRs (ideally flattened with delegation)
+// into agent gateway Route resources.
+func (t *AgentGatewayRouteTranslator) TranslateHttpMatches(
 	routeIR pluginsdkir.HttpRouteIR,
+	matches []pluginsdkir.HttpRouteRuleMatchIR,
 	passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass,
 ) ([]*api.Route, []*api.Policy, error) {
 	var routesOut []*api.Route
 	var polsOut []*api.Policy
 	var acceptanceErrs []error
-
-	for _, rule := range routeIR.Rules {
-		// If the rule has an acceptance error, skip generating routes for this rule
-		if rule.Err != nil {
-			acceptanceErrs = append(acceptanceErrs, rule.Err)
+	for _, matchIR := range matches {
+		if matchIR.RouteAcceptanceError != nil {
+			acceptanceErrs = append(acceptanceErrs, matchIR.RouteAcceptanceError)
 			continue
 		}
-		for _, match := range rule.Matches {
-			matchIR := buildHttpMatchIR(routeIR, rule, match)
-			r := &api.Route{
-				RouteName: fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
-				RuleName:  rule.Name,
-				Hostnames: routeIR.GetHostnames(),
-			}
-			if rm, err := buildRouteMatchFromGW(match); err != nil {
-				return nil, nil, err
-			} else if rm != nil {
-				r.Matches = append(r.Matches, rm)
-			}
-			for _, be := range rule.Backends {
-				if be.Backend == nil || be.Backend.BackendObject == nil {
-					continue
-				}
-				rb := &api.RouteBackend{
-					Weight:  int32(be.Backend.Weight),
-					Backend: &api.BackendReference{Kind: &api.BackendReference_Backend{Backend: be.Backend.BackendObject.Namespace + "/" + be.Backend.BackendObject.Name}},
-				}
-				r.Backends = append(r.Backends, rb)
-				beCtx := &agwir.AgentGatewayTranslationBackendContext{Backend: be.Backend.BackendObject}
-				if err := t.runRouteBackendPolicies(passes, &matchIR, beCtx); err != nil {
-					return nil, nil, err
-				}
-			}
-			if err := t.runRoutePolicies(passes, &matchIR, r); err != nil {
-				return nil, nil, err
-			}
-			routesOut = append(routesOut, r)
+		r := &api.Route{
+			RouteName: fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
+			RuleName:  matchIR.Name,
+			Hostnames: routeIR.GetHostnames(),
 		}
+		if rm, err := buildRouteMatchFromGW(matchIR.Match); err != nil {
+			return nil, nil, err
+		} else if rm != nil {
+			r.Matches = append(r.Matches, rm)
+		}
+		for _, be := range matchIR.Backends {
+			if be.Backend.BackendObject == nil {
+				continue
+			}
+			rb := &api.RouteBackend{
+				Weight:  int32(be.Backend.Weight),
+				Backend: &api.BackendReference{Kind: &api.BackendReference_Backend{Backend: be.Backend.BackendObject.Namespace + "/" + be.Backend.BackendObject.Name}},
+			}
+			r.Backends = append(r.Backends, rb)
+			beCtx := &agwir.AgentGatewayTranslationBackendContext{Backend: be.Backend.BackendObject}
+			backendMatchIR := matchIR
+			if be.AttachedPolicies.Policies != nil {
+				backendMatchIR.AttachedPolicies = be.AttachedPolicies
+			} else {
+				backendMatchIR.AttachedPolicies = pluginsdkir.AttachedPolicies{Policies: map[schema.GroupKind][]pluginsdkir.PolicyAtt{}}
+			}
+			if err := t.runRouteBackendPolicies(passes, &backendMatchIR, beCtx); err != nil {
+				return nil, nil, err
+			}
+		}
+		if err := t.runRoutePolicies(passes, &matchIR, r); err != nil {
+			return nil, nil, err
+		}
+		routesOut = append(routesOut, r)
 	}
 	if len(routesOut) == 0 && len(acceptanceErrs) > 0 {
 		return nil, nil, errors.Join(acceptanceErrs...)
