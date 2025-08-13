@@ -4,13 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/agentgateway/agentgateway/go/api"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
-
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
 	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
@@ -47,39 +44,16 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 			continue
 		}
 		for _, match := range rule.Matches {
+			matchIR := buildHttpMatchIR(routeIR, rule, match)
 			r := &api.Route{
 				RouteName: fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
 				RuleName:  rule.Name,
 				Hostnames: routeIR.GetHostnames(),
 			}
-			if pm, err := buildPathMatchFromGW(match); err != nil {
+			if rm, err := buildRouteMatchFromGW(match); err != nil {
 				return nil, nil, err
-			} else if pm != nil {
-				r.Matches = append(r.Matches, &api.RouteMatch{Path: pm})
-			}
-			if hm, err := buildHeadersMatchFromGW(match); err != nil {
-				return nil, nil, err
-			} else if len(hm) > 0 {
-				if len(r.Matches) == 0 {
-					r.Matches = append(r.Matches, &api.RouteMatch{})
-				}
-				r.Matches[0].Headers = hm
-			}
-			if mm, err := buildMethodMatchFromGW(match); err != nil {
-				return nil, nil, err
-			} else if mm != nil {
-				if len(r.Matches) == 0 {
-					r.Matches = append(r.Matches, &api.RouteMatch{})
-				}
-				r.Matches[0].Method = mm
-			}
-			if qm, err := buildQueryMatchFromGW(match); err != nil {
-				return nil, nil, err
-			} else if len(qm) > 0 {
-				if len(r.Matches) == 0 {
-					r.Matches = append(r.Matches, &api.RouteMatch{})
-				}
-				r.Matches[0].QueryParams = qm
+			} else if rm != nil {
+				r.Matches = append(r.Matches, rm)
 			}
 			for _, be := range rule.Backends {
 				if be.Backend == nil || be.Backend.BackendObject == nil {
@@ -91,22 +65,9 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 				}
 				r.Backends = append(r.Backends, rb)
 				beCtx := &agwir.AgentGatewayTranslationBackendContext{Backend: be.Backend.BackendObject}
-				// Construct a minimal match IR for policy execution ordering
-				matchIR := pluginsdkir.HttpRouteRuleMatchIR{
-					ExtensionRefs:    rule.ExtensionRefs,
-					AttachedPolicies: rule.AttachedPolicies,
-					Parent:           &routeIR,
-					Match:            match,
-				}
 				if err := t.runRouteBackendPolicies(passes, &matchIR, beCtx); err != nil {
 					return nil, nil, err
 				}
-			}
-			matchIR := pluginsdkir.HttpRouteRuleMatchIR{
-				ExtensionRefs:    rule.ExtensionRefs,
-				AttachedPolicies: rule.AttachedPolicies,
-				Parent:           &routeIR,
-				Match:            match,
 			}
 			if err := t.runRoutePolicies(passes, &matchIR, r); err != nil {
 				return nil, nil, err
@@ -281,6 +242,16 @@ func mergePolicies(plugin extensionsplug.PolicyPlugin, pols []pluginsdkir.Policy
 	return []pluginsdkir.PolicyAtt{merged}
 }
 
+// buildHttpMatchIR creates a clean HttpRouteRuleMatchIR for a single match
+func buildHttpMatchIR(routeIR pluginsdkir.HttpRouteIR, rule pluginsdkir.HttpRouteRuleIR, match gwv1.HTTPRouteMatch) pluginsdkir.HttpRouteRuleMatchIR {
+	return pluginsdkir.HttpRouteRuleMatchIR{
+		ExtensionRefs:    rule.ExtensionRefs,
+		AttachedPolicies: rule.AttachedPolicies,
+		Parent:           &routeIR,
+		Match:            match,
+	}
+}
+
 // buildHttpRouteMatch converts gwv1.HTTPRouteMatch to api.RouteMatch
 // Helpers to build ADP matches from gw-api structures
 func buildPathMatchFromGW(match gwv1.HTTPRouteMatch) (*api.PathMatch, error) {
@@ -355,10 +326,33 @@ func buildQueryMatchFromGW(match gwv1.HTTPRouteMatch) ([]*api.QueryMatch, error)
 	return res, nil
 }
 
-func toDuration(s string) *durationpb.Duration {
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return nil
+// buildRouteMatchFromGW builds a single RouteMatch from the HTTPRouteMatch fields,
+// creating the struct once and populating optional sections if present.
+func buildRouteMatchFromGW(match gwv1.HTTPRouteMatch) (*api.RouteMatch, error) {
+	var out api.RouteMatch
+	if pm, err := buildPathMatchFromGW(match); err != nil {
+		return nil, err
+	} else if pm != nil {
+		out.Path = pm
 	}
-	return durationpb.New(d)
+	if hm, err := buildHeadersMatchFromGW(match); err != nil {
+		return nil, err
+	} else if len(hm) > 0 {
+		out.Headers = hm
+	}
+	if mm, err := buildMethodMatchFromGW(match); err != nil {
+		return nil, err
+	} else if mm != nil {
+		out.Method = mm
+	}
+	if qm, err := buildQueryMatchFromGW(match); err != nil {
+		return nil, err
+	} else if len(qm) > 0 {
+		out.QueryParams = qm
+	}
+	// If nothing set, return nil to indicate no match block was created
+	if out.Path == nil && out.Method == nil && len(out.Headers) == 0 && len(out.QueryParams) == 0 {
+		return nil, nil
+	}
+	return &out, nil
 }
