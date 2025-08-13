@@ -125,36 +125,13 @@ func (t *AgentGatewayRouteTranslator) TranslateTcpRoute(
 	routeIR pluginsdkir.TcpRouteIR,
 	passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass,
 ) ([]*api.TCPRoute, []*api.Policy, error) {
-	var out []*api.TCPRoute
-	var polsOut []*api.Policy
-	r := &api.TCPRoute{
-		RouteName: fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
-		RuleName:  "",
-	}
-	// Backend-level policy application mirrors HTTP backend policy order
-	for _, be := range routeIR.Backends {
-		if be.BackendObject == nil {
-			continue
-		}
-		rb := &api.RouteBackend{
-			Weight:  int32(be.Weight),
-			Backend: &api.BackendReference{Kind: &api.BackendReference_Backend{Backend: be.BackendObject.Namespace + "/" + be.BackendObject.Name}},
-		}
-		r.Backends = append(r.Backends, rb)
-		// For TCP, we only have route-level AttachedPolicies on the route itself (no per-match),
-		// so run any route-backend policies using a minimal context.
-		beCtx := &agwir.AgentGatewayTranslationBackendContext{Backend: be.BackendObject}
-		// Construct a minimal HttpRouteRuleMatchIR equivalent for ordering (no ExtensionRefs/Match)
-		matchIR := pluginsdkir.HttpRouteRuleMatchIR{
-			AttachedPolicies: routeIR.AttachedPolicies,
-		}
-		if err := t.runRouteBackendPolicies(passes, &matchIR, beCtx); err != nil {
-			return nil, nil, err
-		}
-	}
-	// If we decide to support TCP route-level policies at some point, they would go here
-	out = append(out, r)
-	return out, polsOut, nil
+	return t.translateTcpLike(
+		fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
+		nil,
+		routeIR.AttachedPolicies,
+		routeIR.Backends,
+		passes,
+	)
 }
 
 // TranslateTlsRoute translates a TlsRouteIR to agent gateway TCPRoute resources (TLS is TCP-level here).
@@ -162,14 +139,32 @@ func (t *AgentGatewayRouteTranslator) TranslateTlsRoute(
 	routeIR pluginsdkir.TlsRouteIR,
 	passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass,
 ) ([]*api.TCPRoute, []*api.Policy, error) {
+	return t.translateTcpLike(
+		fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
+		routeIR.GetHostnames(),
+		routeIR.AttachedPolicies,
+		routeIR.Backends,
+		passes,
+	)
+}
+
+// translateTcpLike is a shared helper for TCP/TLS route translation.
+// hostnames may be nil for pure TCP; non-nil (SNI) for TLS.
+func (t *AgentGatewayRouteTranslator) translateTcpLike(
+	routeName string,
+	hostnames []string,
+	attached pluginsdkir.AttachedPolicies,
+	backends []pluginsdkir.BackendRefIR,
+	passes map[schema.GroupKind]agwir.AgentGatewayTranslationPass,
+) ([]*api.TCPRoute, []*api.Policy, error) {
 	var out []*api.TCPRoute
 	var polsOut []*api.Policy
 	r := &api.TCPRoute{
-		RouteName: fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
+		RouteName: routeName,
 		RuleName:  "",
-		Hostnames: routeIR.GetHostnames(),
+		Hostnames: hostnames,
 	}
-	for _, be := range routeIR.Backends {
+	for _, be := range backends {
 		if be.BackendObject == nil {
 			continue
 		}
@@ -179,14 +174,11 @@ func (t *AgentGatewayRouteTranslator) TranslateTlsRoute(
 		}
 		r.Backends = append(r.Backends, rb)
 		beCtx := &agwir.AgentGatewayTranslationBackendContext{Backend: be.BackendObject}
-		matchIR := pluginsdkir.HttpRouteRuleMatchIR{
-			AttachedPolicies: routeIR.AttachedPolicies,
-		}
+		matchIR := pluginsdkir.HttpRouteRuleMatchIR{AttachedPolicies: attached}
 		if err := t.runRouteBackendPolicies(passes, &matchIR, beCtx); err != nil {
 			return nil, nil, err
 		}
 	}
-	// TLS route-level policies (non-backend) would be applied here if/when defined for agent-gateway
 	out = append(out, r)
 	return out, polsOut, nil
 }
