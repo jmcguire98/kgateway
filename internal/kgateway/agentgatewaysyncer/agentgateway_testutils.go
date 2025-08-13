@@ -33,10 +33,9 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/reports"
 
-	agwbuiltin "github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/plugins/builtin"
-
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/registry"
+	krtcollections "github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/translator/listener"
 	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -629,7 +628,7 @@ func (tc TestCase) Run(
 	}
 
 	plugins := registry.Plugins(ctx, commoncol, wellknown.DefaultAgentGatewayClassName)
-	plugins = append(plugins, agwbuiltin.NewBuiltinPlugin())
+	plugins = append(plugins, krtcollections.NewBuiltinPlugin(ctx))
 
 	var extraPlugs []pluginsdk.Plugin
 	if extraPluginsFn != nil {

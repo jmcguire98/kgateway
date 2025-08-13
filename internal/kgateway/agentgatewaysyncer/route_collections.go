@@ -14,6 +14,7 @@ import (
 	"istio.io/istio/pkg/util/protomarshal"
 	"istio.io/istio/pkg/util/sets"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
@@ -52,7 +53,7 @@ func ADPRouteCollectionFromRoutesIndex(
 		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(httpIR)
 		var gwResult conversionResult[ADPRoute]
 		if err != nil {
-			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
 		} else {
 			for _, r := range routesOut {
 				gwResult.routes = append(gwResult.routes, ADPRoute{Route: r})
@@ -95,7 +96,7 @@ func ADPRouteCollectionFromRoutesIndex(
 		routesOut, _, err := routeTranslator.TranslateHttpLikeRoute(*httpIR)
 		var gwResult conversionResult[ADPRoute]
 		if err != nil {
-			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
 		} else {
 			for _, r := range routesOut {
 				gwResult.routes = append(gwResult.routes, ADPRoute{Route: r})
@@ -133,7 +134,7 @@ func ADPRouteCollectionFromRoutesIndex(
 		tcpOut, _, err := routeTranslator.TranslateTcpRoute(*tcpIR)
 		var gwResult conversionResult[ADPTCPRoute]
 		if err != nil {
-			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
 		} else {
 			for _, r := range tcpOut {
 				gwResult.routes = append(gwResult.routes, ADPTCPRoute{TCPRoute: r})
@@ -167,7 +168,7 @@ func ADPRouteCollectionFromRoutesIndex(
 		tlsOut, _, err := routeTranslator.TranslateTlsRoute(*tlsIR)
 		var gwResult conversionResult[ADPTCPRoute]
 		if err != nil {
-			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted}
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
 		} else {
 			for _, r := range tlsOut {
 				gwResult.routes = append(gwResult.routes, ADPTCPRoute{TCPRoute: r})

@@ -104,6 +104,13 @@ type builtinPluginGwPass struct {
 	needStatefulSession map[string]bool
 }
 
+// Agent Gateway translation pass for the builtin policy
+// builtinPluginAgwPass lives in a separate file for clarity (agw_builtin_pass.go)
+
+// NewBuiltinAgentGatewayPass implemented in agw_builtin_pass.go
+
+// NOTE: ApplyForRoute implemented below
+
 func (p *builtinPluginGwPass) ApplyForBackend(ctx context.Context, pCtx *ir.RouteBackendContext, in ir.HttpBackend, out *envoyroutev3.Route) error {
 	// no op
 	return nil
@@ -142,6 +149,7 @@ func NewBuiltinPlugin(ctx context.Context) extensionsplug.Plugin {
 			pluginsdkir.VirtualBuiltInGK: {
 				// AttachmentPoints: []ir.AttachmentPoints{ir.HttpAttachmentPoint},
 				NewGatewayTranslationPass: NewGatewayTranslationPass,
+				NewAgentGatewayPass:       NewBuiltinAgentGatewayPass,
 			},
 		},
 	}

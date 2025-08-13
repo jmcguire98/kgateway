@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/agentgateway/agentgateway/go/api"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
 	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
@@ -34,8 +37,14 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 ) ([]*api.Route, []*api.Policy, error) {
 	var routesOut []*api.Route
 	var polsOut []*api.Policy
+	var acceptanceErrs []error
 
 	for _, rule := range routeIR.Rules {
+		// If the rule has an acceptance error, skip generating routes for this rule
+		if rule.Err != nil {
+			acceptanceErrs = append(acceptanceErrs, rule.Err)
+			continue
+		}
 		for _, match := range rule.Matches {
 			r := &api.Route{
 				RouteName: fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
@@ -101,8 +110,12 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpLikeRoute(
 			if err := t.runRoutePolicies(&matchIR, r); err != nil {
 				return nil, nil, err
 			}
+			// Note: timeouts/retries are applied by the builtin AGW plugin via ApplyForRoute using IR on pctx
 			routesOut = append(routesOut, r)
 		}
+	}
+	if len(routesOut) == 0 && len(acceptanceErrs) > 0 {
+		return nil, nil, errors.Join(acceptanceErrs...)
 	}
 	return routesOut, polsOut, nil
 }
@@ -204,7 +217,7 @@ func (t *AgentGatewayRouteTranslator) runRoutePolicies(in *pluginsdkir.HttpRoute
 			merged := plugin.MergePolicies(pols)
 			if len(merged.Errors) > 0 {
 				errs = append(errs, merged.Errors...)
-			} else if err := pass.ApplyForRoute(&agwir.AgentGatewayRouteContext{Rule: nil}, out); err != nil {
+			} else if err := pass.ApplyForRoute(&pluginsdkir.RouteContext{In: *in}, out); err != nil {
 				errs = append(errs, err)
 			}
 			continue
@@ -214,7 +227,7 @@ func (t *AgentGatewayRouteTranslator) runRoutePolicies(in *pluginsdkir.HttpRoute
 				errs = append(errs, pa.Errors...)
 				continue
 			}
-			if err := pass.ApplyForRoute(&agwir.AgentGatewayRouteContext{Rule: nil}, out); err != nil {
+			if err := pass.ApplyForRoute(&pluginsdkir.RouteContext{In: *in}, out); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -325,4 +338,12 @@ func buildQueryMatchFromGW(match gwv1.HTTPRouteMatch) ([]*api.QueryMatch, error)
 		}
 	}
 	return res, nil
+}
+
+func toDuration(s string) *durationpb.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return nil
+	}
+	return durationpb.New(d)
 }

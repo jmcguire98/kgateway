@@ -35,7 +35,6 @@ import (
 	gwv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gwv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
@@ -85,21 +84,6 @@ func convertHTTPRouteToADP(ctx RouteContext, r gwv1.HTTPRouteRule,
 	}
 	filters, filterError := buildADPFilters(ctx, obj.Namespace, r.Filters)
 	res.Filters = filters
-
-	agentGatewayRouteContext := agwir.AgentGatewayRouteContext{
-		Rule: &r,
-	}
-
-	for _, pass := range ctx.pluginPasses {
-		if err := pass.ApplyForRoute(&agentGatewayRouteContext, res); err != nil {
-			return nil, &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionAccepted,
-				Status:  metav1.ConditionFalse,
-				Reason:  "PluginError",
-				Message: fmt.Sprintf("failed to apply a plugin: %v", err),
-			}
-		}
-	}
 
 	// Retry: todo
 	route, backendErr, err := buildADPHTTPDestination(ctx, r.BackendRefs, obj.Namespace)
