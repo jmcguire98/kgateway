@@ -11,8 +11,19 @@ import (
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
+	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
+)
+
+const (
+	// defaultRequestedServicePort is used when a backendRef omits the port.
+	// This maintains current behavior for unresolved GRPCRoute service refs.
+	defaultRequestedServicePort int32 = 9000
+
+	// grpcKeySuffix is appended to GRPCRoute keys to distinguish HTTP-like normalization.
+	grpcKeySuffix = ".grpc"
 )
 
 // ErrIncompatibleTerminalFilters indicates multiple terminal actions were attached to a route
@@ -27,7 +38,6 @@ type AgentGatewayRouteTranslator struct {
 
 // NewAgentGatewayRouteTranslator creates a new AgentGatewayRouteTranslator
 func NewAgentGatewayRouteTranslator(extensions extensionsplug.Plugin) *AgentGatewayRouteTranslator {
-	// Start with any contributed policies from extensions
 	contributed := map[schema.GroupKind]extensionsplug.PolicyPlugin{}
 	for gk, pol := range extensions.ContributesPolicies {
 		contributed[gk] = pol
@@ -59,13 +69,13 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpMatches(
 		_ = ok // indexes default to 0,0 if parsing fails
 		r := &api.Route{
 			RouteName: fmt.Sprintf("%s/%s", routeIR.Namespace, routeIR.Name),
-			// RuleName intentionally left empty to match existing golden outputs
+			// RuleName intentionally left empty to match existing expected outputs
 			RuleName:  "",
 			Hostnames: routeIR.GetHostnames(),
-			// GRPC goldens omit match index and use .grpc suffix
+			// GRPC outputs omit match index and use a suffix
 			Key: func() string {
-				if routeIR.ObjectSource.Kind == "GRPCRoute" {
-					return fmt.Sprintf("%s.%s.%d.grpc", routeIR.Namespace, routeIR.Name, ruleIdx)
+				if routeIR.ObjectSource.Kind == wellknown.GRPCRouteKind {
+					return fmt.Sprintf("%s.%s.%d%s", routeIR.Namespace, routeIR.Name, ruleIdx, grpcKeySuffix)
 				}
 				return fmt.Sprintf("%s.%s.%d.%d", routeIR.Namespace, routeIR.Name, ruleIdx, matchIdx)
 			}(),
@@ -76,11 +86,10 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpMatches(
 			r.Matches = append(r.Matches, rm)
 		}
 		for _, be := range matchIR.Backends {
-			// If resolution succeeded, emit the resolved backend ref
 			if be.Backend.BackendObject != nil {
 				var backendRef *api.BackendReference
 				// Prefer service-style reference for Kubernetes Services, else use Backend reference
-				if be.Backend.BackendObject.Kind == "Service" {
+				if be.Backend.BackendObject.Kind == wellknown.ServiceKind {
 					svc := be.Backend.BackendObject.Namespace + "/" + be.Backend.BackendObject.CanonicalHostname
 					backendRef = &api.BackendReference{
 						Kind: &api.BackendReference_Service{Service: svc},
@@ -112,13 +121,13 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpMatches(
 				continue
 			}
 
-			// If unresolved but this is a GRPC route, emit the intended service+port
-			if routeIR.ObjectSource.Kind == "GRPCRoute" && be.Backend.RequestedRef.Kind == "Service" && be.Backend.RequestedRef.Name != "" {
-				fqdn := be.Backend.RequestedRef.Name + "." + be.Backend.RequestedRef.Namespace + ".svc.cluster.local"
+			// If backend is unresolved but this is a GRPC route, emit the intended service+port
+			if routeIR.ObjectSource.Kind == wellknown.GRPCRouteKind && be.Backend.RequestedRef.Kind == wellknown.ServiceKind && be.Backend.RequestedRef.Name != "" {
+				fqdn := kubeutils.GetServiceHostname(be.Backend.RequestedRef.Name, be.Backend.RequestedRef.Namespace)
 				svc := be.Backend.RequestedRef.Namespace + "/" + fqdn
 				port := be.Backend.RequestedPort
 				if port == 0 {
-					port = 9000
+					port = defaultRequestedServicePort
 				}
 				backendRef := &api.BackendReference{
 					Kind: &api.BackendReference_Service{Service: svc},
@@ -130,7 +139,7 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpMatches(
 			}
 
 			// Otherwise, omit backend entry (invalid kind case expects empty {})
-			if routeIR.ObjectSource.Kind != "GRPCRoute" {
+			if routeIR.ObjectSource.Kind != wellknown.GRPCRouteKind {
 				continue
 			}
 			// For GRPC invalid kinds, append an empty backend object to match expected output
