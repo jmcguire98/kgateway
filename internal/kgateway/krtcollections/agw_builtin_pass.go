@@ -163,8 +163,14 @@ func applyRequestRedirectToAgwRoute(route *api.Route, rr *requestRedirectIr) {
 		return
 	}
 	redir := rr.Redir
+	scheme := ""
+	if redir.GetHttpsRedirect() {
+		scheme = "https"
+	} else if redir.GetSchemeRedirect() != "" {
+		scheme = redir.GetSchemeRedirect()
+	}
 	rf := &api.RequestRedirect{
-		Scheme: "",
+		Scheme: scheme,
 		Host:   redir.GetHostRedirect(),
 		Port:   redir.GetPortRedirect(),
 		Status: mapRedirectEnumToHTTP(redir.GetResponseCode()),

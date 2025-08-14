@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/agentgateway/agentgateway/go/api"
-
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	extensionplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
