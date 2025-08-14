@@ -500,7 +500,7 @@ func (s *AgentGwSyncer) buildADPResources(
 		return s.buildListenerFromGateway(obj)
 	}, krtopts.ToOptions("Listeners")...)
 
-	// Build routes from IR using RoutesIndex (Envoy parity)
+	// Build routes from IR using RoutesIndex
 	routeParents := BuildRouteParents(gateways)
 	routeInputs := RouteContextInputs{
 		Grants:          refGrants,

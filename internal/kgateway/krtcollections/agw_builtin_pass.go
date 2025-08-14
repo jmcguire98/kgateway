@@ -34,8 +34,10 @@ func (p *builtinPluginAgwPass) ApplyForRoute(pctx *pluginsdkir.RouteContext, rou
 	if !ok || pol == nil {
 		return nil
 	}
+
 	applyTimeoutsToAgwRoute(route, pol.rule.timeouts)
 	applyRetryToAgwRoute(route, pol.rule.retry)
+
 	if pol.filter != nil {
 		switch v := pol.filter.policy.(type) {
 		case *corsIr:
