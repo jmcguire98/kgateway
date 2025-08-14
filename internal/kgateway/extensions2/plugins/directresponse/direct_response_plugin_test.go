@@ -4,9 +4,10 @@ import (
 	"testing"
 
 	"github.com/agentgateway/agentgateway/go/api"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
-	"github.com/stretchr/testify/require"
 )
 
 func TestDirectResponseAgentGWPass_ApplyForRoute(t *testing.T) {

@@ -49,7 +49,7 @@ func translateHttpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, 
 	}
 
 	parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, routeKind)
-	passes := newAgentGatewayPasses(inputs.Plugins, rep, httpIR.AttachedPolicies)
+	passes := newAgentGatewayPasses(inputs.Plugins, rep)
 	translationCtx := context.WithoutCancel(context.Background())
 	if len(parentRefs) == 0 {
 		return nil
@@ -59,11 +59,6 @@ func translateHttpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, 
 		return nil
 	}
 	matches := httproute.TranslateGatewayHTTPRouteRules(translationCtx, routeInfo, routeReporter.ParentRef(&parentRefs[0].OriginalReference), rep)
-	// Inspect IR for extension-ref resolution errors (e.g., missing DirectResponse)
-	if cond := acceptanceConditionFromIR(httpIR); cond != nil {
-		// seed failure early; still attempt translation for consistency with previous behavior
-		// downstream will set condition on parent ref
-	}
 
 	routesOut, _, err := routeTranslator.TranslateHttpMatches(httpIR, matches, passes)
 	var gwResult conversionResult[ADPRoute]
@@ -148,7 +143,7 @@ func translateTcpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, r
 	rep := reports.NewReporter(&rm)
 	routeReporter := rep.Route(tcp.SourceObject)
 	parentRefs := buildParentReferencesForIR(ctx, tcp.ParentRefs, nil, tcp.Namespace, wellknown.TCPRouteGVK)
-	passes := newAgentGatewayPasses(inputs.Plugins, rep, tcp.AttachedPolicies)
+	passes := newAgentGatewayPasses(inputs.Plugins, rep)
 	tcpOut, _, err := routeTranslator.TranslateTcpRoute(tcp, passes)
 	var gwResult conversionResult[ADPTCPRoute]
 	if err != nil {
@@ -179,7 +174,7 @@ func translateTlsIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, r
 	rep := reports.NewReporter(&rm)
 	routeReporter := rep.Route(tls.SourceObject)
 	parentRefs := buildParentReferencesForIR(ctx, tls.ParentRefs, toGWHostnames(tls.Hostnames), tls.Namespace, wellknown.TLSRouteGVK)
-	passes := newAgentGatewayPasses(inputs.Plugins, rep, tls.AttachedPolicies)
+	passes := newAgentGatewayPasses(inputs.Plugins, rep)
 	tlsOut, _, err := routeTranslator.TranslateTlsRoute(tls, passes)
 	var gwResult conversionResult[ADPTCPRoute]
 	if err != nil {
@@ -354,21 +349,21 @@ type conversionResult[O any] struct {
 	routes []O
 }
 
-func newAgentGatewayPasses(plugs pluginsdk.Plugin,
-	rep reporter.Reporter,
-	aps pluginsdkir.AttachedPolicies) map[schema.GroupKind]agwir.AgentGatewayTranslationPass {
+func newAgentGatewayPasses(plugs pluginsdk.Plugin, rep reporter.Reporter) map[schema.GroupKind]agwir.AgentGatewayTranslationPass {
 	out := map[schema.GroupKind]agwir.AgentGatewayTranslationPass{}
 
 	// Always include the builtin pass so rule-level builtins (eg timeouts/retries) are applied
 	if plugin, ok := plugs.ContributesPolicies[pluginsdkir.VirtualBuiltInGK]; ok && plugin.NewAgentGatewayPass != nil {
 		out[pluginsdkir.VirtualBuiltInGK] = plugin.NewAgentGatewayPass(rep)
 	}
-	for gk := range aps.Policies {
-		plugin, ok := plugs.ContributesPolicies[gk]
-		if !ok || plugin.NewAgentGatewayPass == nil {
+	// Also include passes for all contributed policy plugins; they are no-ops unless a policy is attached
+	for gk, plugin := range plugs.ContributesPolicies {
+		if plugin.NewAgentGatewayPass == nil {
 			continue
 		}
-		// Instantiate pass for any GK that appears in attached policies and has defined a NewAgentGatewayPass
+		if _, exists := out[gk]; exists {
+			continue
+		}
 		out[gk] = plugin.NewAgentGatewayPass(rep)
 	}
 
