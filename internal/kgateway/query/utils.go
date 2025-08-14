@@ -76,6 +76,7 @@ func formatBackendErrorCondition(err error) reports.RouteCondition {
 			Message: err.Error(),
 		}
 	default:
+		// setting other errors to not found. not sure if there's a better option.
 		return reports.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,
 			Status:  metav1.ConditionFalse,

@@ -210,7 +210,6 @@ func (i *BackendIndex) getBackendFromAlias(kctx krt.HandlerContext, gk schema.Gr
 	}
 
 	if !didFetch {
-		// Wrap with a descriptive message while preserving ErrUnknownBackendKind for errors.Is checks
 		return nil, fmt.Errorf("referencing unsupported backendRef: group %q kind %q: %w", gk.Group, gk.Kind, ErrUnknownBackendKind)
 	}
 
@@ -883,7 +882,7 @@ func (c RouteWrapper) Equals(in RouteWrapper) bool {
 type RoutesIndex struct {
 	routes                  krt.Collection[RouteWrapper]
 	httpRoutes              krt.Collection[ir.HttpRouteIR]
-	grpcHttpRoutes          krt.Collection[ir.HttpRouteIR]
+	grpcRoutes              krt.Collection[ir.HttpRouteIR]
 	tcpRoutes               krt.Collection[ir.TcpRouteIR]
 	tlsRoutes               krt.Collection[ir.TlsRouteIR]
 	httpBySelector          krt.Index[HTTPRouteSelector, ir.HttpRouteIR]
@@ -913,7 +912,7 @@ func (r *RoutesIndex) HTTPRoutes() krt.Collection[ir.HttpRouteIR] {
 
 // GRPCRoutesAsHTTP returns GRPCRoutes normalized to HttpRouteIR
 func (r *RoutesIndex) GRPCRoutesAsHTTP() krt.Collection[ir.HttpRouteIR] {
-	return r.grpcHttpRoutes
+	return r.grpcRoutes
 }
 
 // TCPRoutes returns the TCP routes with policies attached
@@ -956,8 +955,8 @@ func NewRoutesIndex(
 		return &RouteWrapper{Route: &i}
 	}, krtopts.ToOptions("routes-tls-routes-with-policy")...)
 
-	h.grpcHttpRoutes = krt.NewCollection(grpcroutes, h.transformGRPCRoute, krtopts.ToOptions("grpc-as-http-routes-with-policy")...)
-	grpcRoutesCollection := krt.NewCollection(h.grpcHttpRoutes, func(kctx krt.HandlerContext, i ir.HttpRouteIR) *RouteWrapper {
+	h.grpcRoutes = krt.NewCollection(grpcroutes, h.transformGRPCRoute, krtopts.ToOptions("grpc-as-http-routes-with-policy")...)
+	grpcRoutesCollection := krt.NewCollection(h.grpcRoutes, func(kctx krt.HandlerContext, i ir.HttpRouteIR) *RouteWrapper {
 		return &RouteWrapper{Route: &i}
 	}, krtopts.ToOptions("routes-grpc-routes-with-policy")...)
 	h.routes = krt.JoinCollection([]krt.Collection[RouteWrapper]{httpRouteCollection, grpcRoutesCollection, tcpRoutesCollection, tlsRoutesCollection}, krtopts.ToOptions("all-routes-with-policy")...)
@@ -1322,6 +1321,7 @@ func (h *RoutesIndex) getBackends(kctx krt.HandlerContext, src ir.ObjectSource, 
 		} else if err == nil {
 			err = &NotFoundError{NotFoundObj: to}
 		}
+
 		// Populate RequestedRef/RequestedPort so downstream translators can emit intended
 		// targets even if resolution failed
 		requested := toFromBackendRef(fromns, ref.BackendRef.BackendObjectReference)

@@ -1,7 +1,6 @@
 package translator
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -12,7 +11,6 @@ import (
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 )
@@ -33,16 +31,6 @@ func NewAgentGatewayRouteTranslator(extensions extensionsplug.Plugin) *AgentGate
 	contributed := map[schema.GroupKind]extensionsplug.PolicyPlugin{}
 	for gk, pol := range extensions.ContributesPolicies {
 		contributed[gk] = pol
-	}
-
-	// Ensure builtin policy is always present so timeouts/retries/CORS/header-modifiers/etc. translate for Agent Gateway
-	if _, ok := contributed[pluginsdkir.VirtualBuiltInGK]; !ok {
-		builtin := krtcollections.NewBuiltinPlugin(context.Background())
-		for gk, pol := range builtin.ContributesPolicies {
-			if _, exists := contributed[gk]; !exists {
-				contributed[gk] = pol
-			}
-		}
 	}
 
 	return &AgentGatewayRouteTranslator{
