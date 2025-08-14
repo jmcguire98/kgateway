@@ -14,6 +14,13 @@ import (
 )
 
 func ProcessBackendError(err error, reporter reports.ParentRefReporter) {
+	cond := formatBackendErrorCondition(err)
+	reporter.SetCondition(cond)
+}
+
+// formatBackendErrorCondition normalizes backend resolution errors into a single
+// RouteCondition shape to ensure parity across HTTP and GRPC translation paths.
+func formatBackendErrorCondition(err error) reports.RouteCondition {
 	// Normalize NotFound error messaging first
 	var nf *krtcollections.NotFoundError
 	if errors.As(err, &nf) {
@@ -22,59 +29,58 @@ func ProcessBackendError(err error, reporter reports.ParentRefReporter) {
 			fqdn := kubeutils.GetServiceHostname(nf.NotFoundObj.Name, nf.NotFoundObj.Namespace)
 			msg = "backend(" + fqdn + ") not found"
 		}
-		reporter.SetCondition(reports.RouteCondition{
+		return reports.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,
 			Status:  metav1.ConditionFalse,
 			Reason:  gwv1.RouteReasonBackendNotFound,
 			Message: msg,
-		})
-		return
+		}
 	}
 	switch {
 	case errors.Is(err, krtcollections.ErrUnknownBackendKind):
 		msg := err.Error()
 		// Remove wrapped sentinel suffix for user-facing message to match expected text
 		msg = strings.TrimSuffix(msg, ": unknown backend kind")
-		reporter.SetCondition(reports.RouteCondition{
+		return reports.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,
 			Status:  metav1.ConditionFalse,
 			Reason:  gwv1.RouteReasonInvalidKind,
 			Message: msg,
-		})
+		}
 	case errors.Is(err, krtcollections.ErrMissingReferenceGrant):
-		reporter.SetCondition(reports.RouteCondition{
+		return reports.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,
 			Status:  metav1.ConditionFalse,
 			Reason:  gwv1.RouteReasonRefNotPermitted,
 			Message: err.Error(),
-		})
+		}
 	case errors.Is(err, ErrCyclicReference):
-		reporter.SetCondition(reports.RouteCondition{
+		return reports.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,
 			Status:  metav1.ConditionFalse,
 			Reason:  gwv1.RouteReasonRefNotPermitted,
 			Message: err.Error(),
-		})
+		}
 	case errors.Is(err, ErrUnresolvedReference):
-		reporter.SetCondition(reports.RouteCondition{
+		return reports.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,
 			Status:  metav1.ConditionFalse,
 			Reason:  gwv1.RouteReasonBackendNotFound,
 			Message: err.Error(),
-		})
+		}
 	case apierrors.IsNotFound(err):
-		reporter.SetCondition(reports.RouteCondition{
+		return reports.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,
 			Status:  metav1.ConditionFalse,
 			Reason:  gwv1.RouteReasonBackendNotFound,
 			Message: err.Error(),
-		})
+		}
 	default:
-		reporter.SetCondition(reports.RouteCondition{
+		return reports.RouteCondition{
 			Type:    gwv1.RouteConditionResolvedRefs,
 			Status:  metav1.ConditionFalse,
 			Reason:  gwv1.RouteReasonBackendNotFound,
 			Message: err.Error(),
-		})
+		}
 	}
 }
