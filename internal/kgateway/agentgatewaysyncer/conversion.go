@@ -355,13 +355,6 @@ func referenceAllowed(
 	return nil
 }
 
-// https://github.com/kubernetes-sigs/gateway-api/blob/cea484e38e078a2c1997d8c7a62f410a1540f519/apis/v1beta1/httproute_types.go#L207-L212
-func isInvalidBackend(err *reporter.RouteCondition) bool {
-	return err.Reason == gwv1.RouteReasonRefNotPermitted ||
-		err.Reason == gwv1.RouteReasonBackendNotFound ||
-		err.Reason == gwv1.RouteReasonInvalidKind
-}
-
 // parentKey holds info about a parentRef (eg route binding to a Gateway). This is a mirror of
 // gwv1.ParentReference in a form that can be stored in a map
 type parentKey struct {

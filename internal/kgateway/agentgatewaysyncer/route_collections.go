@@ -382,7 +382,6 @@ type RouteContext struct {
 	Krt krt.HandlerContext
 	RouteContextInputs
 	AttachedPolicies pluginsdkir.AttachedPolicies
-	pluginPasses     []agwir.AgentGatewayTranslationPass
 }
 
 type RouteContextInputs struct {
@@ -417,41 +416,4 @@ func (r RouteWithKey) ResourceName() string {
 
 func (r RouteWithKey) Equals(o RouteWithKey) bool {
 	return r.Config.Equals(o.Config)
-}
-
-// attachRoutePolicies populates ctx.AttachedPolicies with policies that
-// target the given HTTPRoute. It uses the exported LookupTargetingPolicies
-// from PolicyIndex.
-func attachRoutePolicies(ctx *RouteContext, route *gwv1.HTTPRoute) {
-	if ctx.Backends == nil {
-		return
-	}
-	pi := ctx.Backends.PolicyIndex()
-	if pi == nil {
-		return
-	}
-
-	target := pluginsdkir.ObjectSource{
-		Group:     wellknown.HTTPRouteGVK.Group,
-		Kind:      wellknown.HTTPRouteGVK.Kind,
-		Namespace: route.Namespace,
-		Name:      route.Name,
-	}
-
-	pols := pi.LookupTargetingPolicies(ctx.Krt,
-		pluginsdk.RouteAttachmentPoint,
-		target,
-		"", // route-level
-		route.GetLabels())
-
-	aps := pluginsdkir.AttachedPolicies{Policies: map[schema.GroupKind][]pluginsdkir.PolicyAtt{}}
-	for _, pa := range pols {
-		a := aps.Policies[pa.GroupKind]
-		aps.Policies[pa.GroupKind] = append(a, pa)
-	}
-
-	if _, ok := aps.Policies[pluginsdkir.VirtualBuiltInGK]; !ok {
-		aps.Policies[pluginsdkir.VirtualBuiltInGK] = nil
-	}
-	ctx.AttachedPolicies = aps
 }

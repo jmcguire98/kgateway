@@ -371,16 +371,6 @@ func mergePolicies(plugin extensionsplug.PolicyPlugin, pols []pluginsdkir.Policy
 	return []pluginsdkir.PolicyAtt{merged}
 }
 
-// buildHttpMatchIR creates a clean HttpRouteRuleMatchIR for a single match
-func buildHttpMatchIR(routeIR pluginsdkir.HttpRouteIR, rule pluginsdkir.HttpRouteRuleIR, match gwv1.HTTPRouteMatch) pluginsdkir.HttpRouteRuleMatchIR {
-	return pluginsdkir.HttpRouteRuleMatchIR{
-		ExtensionRefs:    rule.ExtensionRefs,
-		AttachedPolicies: rule.AttachedPolicies,
-		Parent:           &routeIR,
-		Match:            match,
-	}
-}
-
 // buildHttpRouteMatch converts gwv1.HTTPRouteMatch to api.RouteMatch
 // Helpers to build ADP matches from gw-api structures
 func buildPathMatchFromGW(match gwv1.HTTPRouteMatch) (*api.PathMatch, error) {
