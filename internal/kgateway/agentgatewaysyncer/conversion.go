@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/agentgateway/agentgateway/go/api"
 	"istio.io/api/annotation"
 	istio "istio.io/api/networking/v1alpha3"
 	kubecreds "istio.io/istio/pilot/pkg/credentials/kube"
@@ -33,9 +32,6 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
 
-	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
 )
@@ -43,148 +39,6 @@ import (
 const (
 	gatewayTLSTerminateModeKey = "gateway.agentgateway.io/tls-terminate-mode"
 )
-
-func buildADPDestination(
-	ctx RouteContext,
-	to gwv1.HTTPBackendRef,
-	ns string,
-	k schema.GroupVersionKind,
-	backendCol *krtcollections.BackendIndex,
-) (*api.RouteBackend, *reporter.RouteCondition) {
-	ref := normalizeReference(to.Group, to.Kind, wellknown.ServiceGVK)
-	// check if the reference is allowed
-	if toNs := to.Namespace; toNs != nil && string(*toNs) != ns {
-		if !ctx.Grants.BackendAllowed(ctx.Krt, k, to.Name, *toNs, ns, ref) {
-			return nil, &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionResolvedRefs,
-				Status:  metav1.ConditionFalse,
-				Reason:  gwv1.RouteReasonRefNotPermitted,
-				Message: fmt.Sprintf("backendRef %v/%v not accessible to a %s in namespace %q (missing a ReferenceGrant?)", to.Name, *toNs, k.Kind, ns),
-			}
-		}
-	}
-
-	namespace := ns // use default
-	if to.Namespace != nil {
-		namespace = string(*to.Namespace)
-	}
-	var invalidBackendErr *reporter.RouteCondition
-	var hostname string
-	weight := int32(1) // default
-	if to.Weight != nil {
-		weight = *to.Weight
-	}
-	rb := &api.RouteBackend{
-		Weight: weight,
-	}
-	var port *gwv1.PortNumber
-
-	switch ref.GroupKind() {
-	case wellknown.InferencePoolGVK.GroupKind():
-		if strings.Contains(string(to.Name), ".") {
-			return nil, &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionAccepted,
-				Status:  metav1.ConditionFalse,
-				Reason:  gwv1.RouteReasonUnsupportedValue,
-				Message: "service name invalid; the name of the Service must be used, not the hostname."}
-		}
-		hostname = kubeutils.GetInferenceServiceHostname(string(to.Name), namespace)
-		key := namespace + "/" + string(to.Name)
-		svc := ptr.Flatten(krt.FetchOne(ctx.Krt, ctx.InferencePools, krt.FilterKey(key)))
-		logger.Debug("found pull pool for service", "svc", svc, "key", key)
-		if svc == nil {
-			invalidBackendErr = &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionResolvedRefs,
-				Status:  metav1.ConditionFalse,
-				Reason:  gwv1.RouteReasonBackendNotFound,
-				Message: fmt.Sprintf("backendRef(%s) not found", hostname)}
-		} else {
-			rb.Backend = &api.BackendReference{
-				Kind: &api.BackendReference_Service{
-					Service: namespace + "/" + hostname,
-				},
-				Port: uint32(svc.Spec.TargetPortNumber),
-			}
-		}
-	case wellknown.ServiceGVK.GroupKind():
-		port = to.Port
-		if strings.Contains(string(to.Name), ".") {
-			return nil, &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionAccepted,
-				Status:  metav1.ConditionFalse,
-				Reason:  gwv1.RouteReasonUnsupportedValue,
-				Message: "service name invalid; the name of the Service must be used, not the hostname."}
-		}
-		hostname = kubeutils.GetServiceHostname(string(to.Name), namespace)
-		key := namespace + "/" + string(to.Name)
-		svc := ptr.Flatten(krt.FetchOne(ctx.Krt, ctx.Services, krt.FilterKey(key)))
-		if svc == nil {
-			invalidBackendErr = &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionResolvedRefs,
-				Status:  metav1.ConditionFalse,
-				Reason:  gwv1.RouteReasonBackendNotFound,
-				Message: fmt.Sprintf("backend(%s) not found", hostname)}
-		}
-		// TODO: All kubernetes service types currently require a Port, so we do this for everything; consider making this per-type if we have future types
-		// that do not require port.
-		if port == nil {
-			// "Port is required when the referent is a Kubernetes Service."
-			return nil, &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionAccepted,
-				Status:  metav1.ConditionFalse,
-				Reason:  gwv1.RouteReasonUnsupportedValue,
-				Message: "port is required in backendRef"}
-		}
-		rb.Backend = &api.BackendReference{
-			Kind: &api.BackendReference_Service{
-				Service: namespace + "/" + hostname,
-			},
-			Port: uint32(*port),
-		}
-	case wellknown.BackendGVK.GroupKind():
-		// Create the source ObjectSource representing the route object making the reference
-		routeSrc := ir.ObjectSource{
-			Group:     k.Group,
-			Kind:      k.Kind,
-			Namespace: ns,
-		}
-
-		// Create the backend reference from the 'to' parameter
-		backendRef := gwv1.BackendObjectReference{
-			Group:     to.Group,
-			Kind:      to.Kind,
-			Name:      to.Name,
-			Namespace: to.Namespace,
-			Port:      to.Port,
-		}
-
-		kgwBackend, err := backendCol.GetBackendFromRef(ctx.Krt, routeSrc, backendRef)
-		if err != nil {
-			logger.Error("failed to get kgateway Backend", "error", err)
-			return nil, &reporter.RouteCondition{
-				Type:    gwv1.RouteConditionResolvedRefs,
-				Status:  metav1.ConditionFalse,
-				Reason:  gwv1.RouteReasonBackendNotFound,
-				Message: fmt.Sprintf("kgateway Backend not found: %v", err),
-			}
-		}
-
-		logger.Debug("successfully resolved kgateway Backend", "backend", kgwBackend.Name)
-		rb.Backend = &api.BackendReference{
-			Kind: &api.BackendReference_Backend{
-				Backend: kgwBackend.Namespace + "/" + kgwBackend.Name,
-			},
-		}
-	default:
-		return nil, &reporter.RouteCondition{
-			Type:    gwv1.RouteConditionResolvedRefs,
-			Status:  metav1.ConditionFalse,
-			Reason:  gwv1.RouteReasonInvalidKind,
-			Message: fmt.Sprintf("referencing unsupported backendRef: group %q kind %q", ptr.OrEmpty(to.Group), ptr.OrEmpty(to.Kind)),
-		}
-	}
-	return rb, invalidBackendErr
-}
 
 func parentMeta(obj controllers.Object, sectionName *gwv1.SectionName) map[string]string {
 	kind := obj.GetObjectKind().GroupVersionKind().Kind
@@ -833,20 +687,6 @@ func defaultString[T ~string](s *T, def string) string {
 
 func toRouteKind(g schema.GroupVersionKind) gwv1.RouteGroupKind {
 	return gwv1.RouteGroupKind{Group: (*gwv1.Group)(&g.Group), Kind: gwv1.Kind(g.Kind)}
-}
-
-// findDirectResponse looks up a DirectResponse resource by name and namespace
-func findDirectResponse(ctx RouteContext, name, namespace string) *v1alpha1.DirectResponse {
-	if ctx.DirectResponses == nil {
-		return nil
-	}
-	directResponses := krt.Fetch(ctx.Krt, ctx.DirectResponses)
-	for _, dr := range directResponses {
-		if dr.Name == name && dr.Namespace == namespace {
-			return dr
-		}
-	}
-	return nil
 }
 
 func routeGroupKindEqual(rgk1, rgk2 gwv1.RouteGroupKind) bool {
