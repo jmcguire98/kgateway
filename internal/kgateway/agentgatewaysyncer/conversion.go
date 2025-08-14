@@ -22,7 +22,6 @@ import (
 	"istio.io/istio/pkg/kube/controllers"
 	"istio.io/istio/pkg/kube/krt"
 	"istio.io/istio/pkg/ptr"
-	"istio.io/istio/pkg/slices"
 	"istio.io/istio/pkg/util/sets"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -354,64 +353,6 @@ func referenceAllowed(
 		}
 	}
 	return nil
-}
-
-func extractParentReferenceInfo(ctx RouteContext, parents RouteParents, obj controllers.Object) []routeParentReference {
-	routeRefs, hostnames, kind := GetCommonRouteInfo(obj)
-	localNamespace := obj.GetNamespace()
-	var parentRefs []routeParentReference
-	for _, ref := range routeRefs {
-		ir, err := toInternalParentReference(ref, localNamespace)
-		if err != nil {
-			// Cannot handle the reference. Maybe it is for another controller, so we just ignore it
-			continue
-		}
-		pk := parentReference{
-			parentKey:   ir,
-			SectionName: ptr.OrEmpty(ref.SectionName),
-			Port:        ptr.OrEmpty(ref.Port),
-		}
-		gk := ir
-		currentParents := parents.fetch(ctx.Krt, gk)
-		appendParent := func(pr *parentInfo, pk parentReference) {
-			bannedHostnames := sets.New[string]()
-			for _, gw := range currentParents {
-				if gw == pr {
-					continue // do not ban ourself
-				}
-				if gw.Port != pr.Port {
-					// We only care about listeners on the same port
-					continue
-				}
-				if gw.Protocol != pr.Protocol {
-					// We only care about listeners on the same protocol
-					continue
-				}
-				bannedHostnames.Insert(gw.OriginalHostname)
-			}
-			deniedReason := referenceAllowed(ctx, pr, kind, pk, hostnames, localNamespace)
-			rpi := routeParentReference{
-				InternalName:      pr.InternalName,
-				InternalKind:      ir.Kind,
-				Hostname:          pr.OriginalHostname,
-				DeniedReason:      deniedReason,
-				OriginalReference: ref,
-				BannedHostnames:   bannedHostnames.Copy().Delete(pr.OriginalHostname),
-				ParentKey:         ir,
-				ParentSection:     pr.SectionName,
-			}
-			parentRefs = append(parentRefs, rpi)
-		}
-		for _, gw := range currentParents {
-			// Append all matches. Note we may be adding mismatch section or ports; this is handled later
-			appendParent(gw, pk)
-		}
-	}
-	// Ensure stable order
-	slices.SortBy(parentRefs, func(a routeParentReference) string {
-		return parentRefString(a.OriginalReference)
-	})
-	return parentRefs
 }
 
 // https://github.com/kubernetes-sigs/gateway-api/blob/cea484e38e078a2c1997d8c7a62f410a1540f519/apis/v1beta1/httproute_types.go#L207-L212

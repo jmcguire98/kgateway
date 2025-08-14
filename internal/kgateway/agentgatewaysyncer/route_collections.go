@@ -1,7 +1,6 @@
 package agentgatewaysyncer
 
 import (
-	"iter"
 	"strings"
 
 	"context"
@@ -9,7 +8,6 @@ import (
 	"github.com/agentgateway/agentgateway/go/api"
 	networkingclient "istio.io/client-go/pkg/apis/networking/v1"
 	"istio.io/istio/pkg/config"
-	"istio.io/istio/pkg/kube/controllers"
 	"istio.io/istio/pkg/kube/krt"
 	isptr "istio.io/istio/pkg/ptr"
 	"istio.io/istio/pkg/slices"
@@ -38,17 +36,18 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/reports"
 )
 
-// ADPRouteCollectionFromRoutesIndex creates the collection of translated routes using the shared RoutesIndex IR
 func translateHttpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, routeTranslator *agwtranslator.AgentGatewayRouteTranslator, httpIR pluginsdkir.HttpRouteIR) []ADPResourcesForGateway {
 	ctx := inputs.WithCtx(krtctx)
 	rm := reports.NewReportMap()
 	rep := reports.NewReporter(&rm)
 	routeReporter := rep.Route(httpIR.SourceObject)
-	// Use GRPCRoute kind when translating normalized GRPC-as-HTTP IRs to satisfy AllowedKinds checks
+
 	routeKind := wellknown.HTTPRouteGVK
+	// Use GRPCRoute kind when translating normalized GRPC-as-HTTP IRs to satisfy AllowedKinds checks
 	if httpIR.ObjectSource.Kind == wellknown.GRPCRouteKind {
 		routeKind = wellknown.GRPCRouteGVK
 	}
+
 	parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, routeKind)
 	passes := newAgentGatewayPasses(inputs.Plugins, rep, httpIR.AttachedPolicies)
 	translationCtx := context.WithoutCancel(context.Background())
@@ -205,13 +204,13 @@ func translateTlsIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, r
 	return results
 }
 
+// ADPRouteCollectionFromRoutesIndex creates the collection of translated routes using the shared RoutesIndex IR
 func ADPRouteCollectionFromRoutesIndex(
 	routes *krtcollections.RoutesIndex,
 	inputs RouteContextInputs,
 	krtopts krtinternal.KrtOptions,
 	routeTranslator *agwtranslator.AgentGatewayRouteTranslator,
 ) krt.Collection[ADPResourcesForGateway] {
-	// HTTP and GRPC (normalized to HTTPRouteIR via RoutesIndex)
 	httpRoutes := krt.NewManyCollection(routes.HTTPRoutes(), func(krtctx krt.HandlerContext, httpIR pluginsdkir.HttpRouteIR) []ADPResourcesForGateway {
 		return translateHttpIRToADP(krtctx, inputs, routeTranslator, httpIR)
 	}, krtopts.ToOptions("ADPHTTPRoutesFromIR")...)
@@ -231,12 +230,13 @@ func ADPRouteCollectionFromRoutesIndex(
 	return krt.JoinCollection([]krt.Collection[ADPResourcesForGateway]{httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes}, krtopts.ToOptions("ADPRoutesFromIR")...)
 }
 
-// buildParentReferencesForIR mirrors extractParentReferenceInfo but takes IR inputs to avoid depending on controllers.Object
+// buildParentReferencesForIR builds parent references for a routeIR
 func buildParentReferencesForIR(ctx RouteContext, routeRefs []gwv1.ParentReference, hostnames []gwv1.Hostname, localNamespace string, kind schema.GroupVersionKind) []routeParentReference {
 	var parentRefs []routeParentReference
 	for _, ref := range routeRefs {
 		irKey, err := toInternalParentReference(ref, localNamespace)
 		if err != nil {
+			// Cannot handle the reference. Maybe it is for another controller, so we just ignore it
 			continue
 		}
 		pk := parentReference{
@@ -276,11 +276,11 @@ func buildParentReferencesForIR(ctx RouteContext, routeRefs []gwv1.ParentReferen
 			appendParent(gw, pk)
 		}
 	}
-	// Ensure stable order
 	slices.SortBy(parentRefs, func(a routeParentReference) string { return parentRefString(a.OriginalReference) })
 	return parentRefs
 }
 
+// toGWHostnames converts a list of strings to a list of gwv1.Hostname
 func toGWHostnames(in []string) []gwv1.Hostname {
 	if len(in) == 0 {
 		return nil
@@ -290,13 +290,6 @@ func toGWHostnames(in []string) []gwv1.Hostname {
 		out[i] = gwv1.Hostname(s)
 	}
 	return out
-}
-
-func defaultInt32(v *gwv1.PortNumber, def gwv1.PortNumber) gwv1.PortNumber {
-	if v == nil {
-		return def
-	}
-	return *v
 }
 
 // buildAttachedRoutesMap builds a map of gateway -> section name -> route count
@@ -356,185 +349,30 @@ func processParentReferences[T any](
 	return resourcesPerGateway
 }
 
-// createRouteCollection is a generic helper function that creates a KRT collection for any route type
-// by extracting the common logic shared between HTTP and GRPC route collections
-func createRouteCollection[T controllers.Object](
-	routeCol krt.Collection[T],
-	inputs RouteContextInputs,
-	krtopts krtinternal.KrtOptions,
-	plugins pluginsdk.Plugin,
-	collectionName string,
-	translator func(ctx RouteContext, obj T, rep reporter.Reporter) (RouteContext, iter.Seq2[ADPRoute, *reporter.RouteCondition]),
-) krt.Collection[ADPResourcesForGateway] {
-	return krt.NewManyCollection(routeCol, func(krtctx krt.HandlerContext, obj T) []ADPResourcesForGateway {
-		logger.Debug("translating route", "route_name", obj.GetName(), "resource_version", obj.GetResourceVersion())
-
-		ctx := inputs.WithCtx(krtctx)
-		rm := reports.NewReportMap()
-		rep := reports.NewReporter(&rm)
-		routeReporter := rep.Route(obj)
-
-		// Apply route-specific preprocessing and get the translator
-		ctx, translatorSeq := translator(ctx, obj, rep)
-
-		parentRefs, gwResult := computeRoute(ctx, obj, func(obj T) iter.Seq2[ADPRoute, *reporter.RouteCondition] {
-			return translatorSeq
-		})
-
-		// gateway -> section name -> route count
-		attachedRoutes := buildAttachedRoutesMap(parentRefs)
-
-		resourcesPerGateway := processParentReferences(
-			parentRefs,
-			gwResult,
-			obj.GetName(),
-			routeReporter,
-			func(e ADPRoute, parent routeParentReference) *api.Resource {
-				inner := protomarshal.Clone(e.Route)
-				_, name, _ := strings.Cut(parent.InternalName, "/")
-				inner.ListenerKey = name
-				inner.Key = inner.GetKey() + "." + string(parent.ParentSection)
-				return toADPResource(ADPRoute{Route: inner})
-			},
-		)
-
-		var results []ADPResourcesForGateway
-		for gw, res := range resourcesPerGateway {
-			var attachedRoutesForGw map[string]uint
-			if attachedRoutes[gw] != nil {
-				attachedRoutesForGw = attachedRoutes[gw]
-			}
-			results = append(results, toResourceWithRoutes(gw, res, attachedRoutesForGw, rm))
-		}
-		return results
-	}, krtopts.ToOptions(collectionName)...)
-}
-
-// createTCPRouteCollection is a generic helper function that creates a KRT collection for any route type
-// by extracting the common logic shared between TCP and TLS route collections
-func createTCPRouteCollection[T controllers.Object](
-	routeCol krt.Collection[T],
-	inputs RouteContextInputs,
-	krtopts krtinternal.KrtOptions,
-	plugins pluginsdk.Plugin,
-	collectionName string,
-	translator func(ctx RouteContext, obj T, rep reporter.Reporter) (RouteContext, iter.Seq2[ADPTCPRoute, *reporter.RouteCondition]),
-) krt.Collection[ADPResourcesForGateway] {
-	return krt.NewManyCollection(routeCol, func(krtctx krt.HandlerContext, obj T) []ADPResourcesForGateway {
-		logger.Debug("translating route", "route_name", obj.GetName(), "resource_version", obj.GetResourceVersion())
-
-		ctx := inputs.WithCtx(krtctx)
-		rm := reports.NewReportMap()
-		rep := reports.NewReporter(&rm)
-		routeReporter := rep.Route(obj)
-
-		// Apply route-specific preprocessing and get the translator
-		ctx, translatorSeq := translator(ctx, obj, rep)
-
-		parentRefs, gwResult := computeRoute(ctx, obj, func(obj T) iter.Seq2[ADPTCPRoute, *reporter.RouteCondition] {
-			return translatorSeq
-		})
-
-		// gateway -> section name -> route count
-		attachedRoutes := buildAttachedRoutesMap(parentRefs)
-
-		resourcesPerGateway := processParentReferences(
-			parentRefs,
-			gwResult,
-			obj.GetName(),
-			routeReporter,
-			func(e ADPTCPRoute, parent routeParentReference) *api.Resource {
-				inner := protomarshal.Clone(e.TCPRoute)
-				_, name, _ := strings.Cut(parent.InternalName, "/")
-				inner.ListenerKey = name
-				inner.Key = inner.GetKey() + "." + string(parent.ParentSection)
-				return toADPResource(ADPTCPRoute{TCPRoute: inner})
-			},
-		)
-
-		var results []ADPResourcesForGateway
-		for gw, res := range resourcesPerGateway {
-			var attachedRoutesForGw map[string]uint
-			if attachedRoutes[gw] != nil {
-				attachedRoutesForGw = attachedRoutes[gw]
-			}
-			results = append(results, toResourceWithRoutes(gw, res, attachedRoutesForGw, rm))
-		}
-		return results
-	}, krtopts.ToOptions(collectionName)...)
-}
-
 type conversionResult[O any] struct {
 	error  *reporter.RouteCondition
 	routes []O
-}
-
-// IsNil works around comparing generic types
-func IsNil[O comparable](o O) bool {
-	var t O
-	return o == t
 }
 
 func newAgentGatewayPasses(plugs pluginsdk.Plugin,
 	rep reporter.Reporter,
 	aps pluginsdkir.AttachedPolicies) map[schema.GroupKind]agwir.AgentGatewayTranslationPass {
 	out := map[schema.GroupKind]agwir.AgentGatewayTranslationPass{}
-	// Always include the builtin pass so rule-level builtins (timeouts/retries) are applied
+
+	// Always include the builtin pass so rule-level builtins (eg timeouts/retries) are applied
 	if plugin, ok := plugs.ContributesPolicies[pluginsdkir.VirtualBuiltInGK]; ok && plugin.NewAgentGatewayPass != nil {
 		out[pluginsdkir.VirtualBuiltInGK] = plugin.NewAgentGatewayPass(rep)
-	}
-	if len(aps.Policies) == 0 {
-		// Even if no route-level policies are attached, extension refs may appear
-		// on rules/backends. Instantiate passes for all contributed policies so
-		// ApplyForRoute/ApplyForRouteBackend can run when referenced.
-		for gk, plugin := range plugs.ContributesPolicies {
-			if _, exists := out[gk]; exists {
-				continue
-			}
-			if plugin.NewAgentGatewayPass == nil {
-				continue
-			}
-			out[gk] = plugin.NewAgentGatewayPass(rep)
-		}
-		return out
 	}
 	for gk := range aps.Policies {
 		plugin, ok := plugs.ContributesPolicies[gk]
 		if !ok || plugin.NewAgentGatewayPass == nil {
 			continue
 		}
-		// Instantiate pass for any GK that appears in attached policies
+		// Instantiate pass for any GK that appears in attached policies and has defined a NewAgentGatewayPass
 		out[gk] = plugin.NewAgentGatewayPass(rep)
 	}
+
 	return out
-}
-
-// computeRoute holds the common route building logic shared amongst all types
-func computeRoute[T controllers.Object, O comparable](ctx RouteContext, obj T, translator func(
-	obj T,
-) iter.Seq2[O, *reporter.RouteCondition],
-) ([]routeParentReference, conversionResult[O]) {
-	parentRefs := extractParentReferenceInfo(ctx, ctx.RouteParents, obj)
-
-	convertRules := func() conversionResult[O] {
-		res := conversionResult[O]{}
-		for vs, err := range translator(obj) {
-			// This was a hard error
-			if err != nil && IsNil(vs) {
-				res.error = err
-				return conversionResult[O]{error: err}
-			}
-			// Got an error but also routes
-			if err != nil {
-				res.error = err
-			}
-			res.routes = append(res.routes, vs)
-		}
-		return res
-	}
-	gwResult := buildGatewayRoutes(convertRules)
-
-	return parentRefs, gwResult
 }
 
 // RouteContext defines a common set of inputs to a route collection for agentgateway.
@@ -579,11 +417,6 @@ func (r RouteWithKey) ResourceName() string {
 
 func (r RouteWithKey) Equals(o RouteWithKey) bool {
 	return r.Config.Equals(o.Config)
-}
-
-// buildGatewayRoutes contains common logic to build a set of routes with gwv1beta1 semantics
-func buildGatewayRoutes[T any](convertRules func() T) T {
-	return convertRules()
 }
 
 // attachRoutePolicies populates ctx.AttachedPolicies with policies that
