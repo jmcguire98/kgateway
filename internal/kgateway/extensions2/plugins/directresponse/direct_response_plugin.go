@@ -17,12 +17,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 
+	"github.com/agentgateway/agentgateway/go/api"
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	extensionplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
+	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/client/clientset/versioned"
+	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/reports"
 )
 
@@ -96,6 +99,7 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 				Policies: policyCol,
 				//				AttachmentPoints:          []ir.AttachmentPoints{ir.HttpAttachmentPoint},
 				NewGatewayTranslationPass: NewGatewayTranslationPass,
+				NewAgentGatewayPass:       NewAgentGatewayPass,
 			},
 		},
 	}
@@ -149,4 +153,53 @@ func (p *directResponsePluginGwPass) ApplyForRouteBackend(
 	pCtx *ir.RouteBackendContext,
 ) error {
 	return ir.ErrNotAttachable
+}
+
+// Agent Gateway DirectResponse pass (route-level)
+type directResponseAgentGwPass struct{}
+
+var _ agwir.AgentGatewayTranslationPass = &directResponseAgentGwPass{}
+
+func NewAgentGatewayPass(_ reports.Reporter) agwir.AgentGatewayTranslationPass {
+	return &directResponseAgentGwPass{}
+}
+
+func (p *directResponseAgentGwPass) ApplyForRoute(pCtx *pluginsdkir.RouteContext, out *api.Route) error {
+	dr, ok := pCtx.Policy.(*directResponse)
+	if !ok || dr == nil {
+		return nil
+	}
+	rf := &api.RouteFilter{
+		Kind: &api.RouteFilter_DirectResponse{
+			DirectResponse: &api.DirectResponse{
+				Status: dr.spec.StatusCode,
+			},
+		},
+	}
+	if dr.spec.Body != nil {
+		rf.GetDirectResponse().Body = []byte(*dr.spec.Body)
+	}
+	out.Filters = append(out.Filters, rf)
+	return nil
+}
+
+func (p *directResponseAgentGwPass) ApplyForBackend(_ *agwir.AgentGatewayTranslationBackendContext, _ *api.Backend) error {
+	return nil
+}
+
+func (p *directResponseAgentGwPass) ApplyForRouteBackend(pol pluginsdkir.PolicyIR, beCtx *agwir.AgentGatewayTranslationBackendContext) error {
+	dr, ok := pol.(*directResponse)
+	if !ok || dr == nil || beCtx == nil {
+		return nil
+	}
+	rf := &api.RouteFilter{
+		Kind: &api.RouteFilter_DirectResponse{
+			DirectResponse: &api.DirectResponse{Status: dr.spec.StatusCode},
+		},
+	}
+	if dr.spec.Body != nil {
+		rf.GetDirectResponse().Body = []byte(*dr.spec.Body)
+	}
+	beCtx.BackendFilters = append(beCtx.BackendFilters, rf)
+	return nil
 }

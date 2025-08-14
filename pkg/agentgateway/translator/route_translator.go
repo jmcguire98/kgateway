@@ -17,6 +17,9 @@ import (
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 )
 
+// ErrIncompatibleTerminalFilters indicates multiple terminal actions were attached to a route
+var ErrIncompatibleTerminalFilters = errors.New("incompatible terminal filters on route rule")
+
 // AgentGatewayRouteTranslator handles translation of route IR to agent gateway route resources
 type AgentGatewayRouteTranslator struct {
 	// ContributedPolicies maps policy GKs to agent-gateway translation passes
@@ -57,10 +60,11 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpMatches(
 	var routesOut []*api.Route
 	var polsOut []*api.Policy
 	var acceptanceErrs []error
+	var terminalConflictDetected bool
 	for _, matchIR := range matches {
 		if matchIR.RouteAcceptanceError != nil {
+			// Record acceptance error but continue building the route to surface status conditions
 			acceptanceErrs = append(acceptanceErrs, matchIR.RouteAcceptanceError)
-			continue
 		}
 		// Derive rule/match indexes from the unique route name to build a stable key
 		ruleIdx, matchIdx, ok := parseRuleAndMatchIndexes(matchIR.Name)
@@ -114,6 +118,9 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpMatches(
 				if err := t.runRouteBackendPolicies(passes, &backendMatchIR, beCtx); err != nil {
 					return nil, nil, err
 				}
+				if len(beCtx.BackendFilters) > 0 {
+					rb.Filters = append(rb.Filters, beCtx.BackendFilters...)
+				}
 				continue
 			}
 
@@ -144,12 +151,66 @@ func (t *AgentGatewayRouteTranslator) TranslateHttpMatches(
 		if err := t.runRoutePolicies(passes, &matchIR, r); err != nil {
 			return nil, nil, err
 		}
+		// Detect terminal filter overlap before normalization
+		{
+			hasRedirect := false
+			hasDirect := false
+			for _, f := range r.Filters {
+				if f == nil || f.Kind == nil {
+					continue
+				}
+				switch f.Kind.(type) {
+				case *api.RouteFilter_RequestRedirect:
+					hasRedirect = true
+				case *api.RouteFilter_DirectResponse:
+					hasDirect = true
+				}
+			}
+			if hasRedirect && hasDirect {
+				terminalConflictDetected = true
+			}
+		}
+		r.Filters = normalizeTerminalFilters(r.Filters)
 		routesOut = append(routesOut, r)
 	}
 	if len(routesOut) == 0 && len(acceptanceErrs) > 0 {
 		return nil, nil, errors.Join(acceptanceErrs...)
 	}
+	if terminalConflictDetected {
+		return routesOut, polsOut, ErrIncompatibleTerminalFilters
+	}
 	return routesOut, polsOut, nil
+}
+
+// normalizeTerminalFilters ensures only one terminal action is present on a route.
+// Precedence: RequestRedirect over DirectResponse. Non-terminal filters are preserved.
+func normalizeTerminalFilters(in []*api.RouteFilter) []*api.RouteFilter {
+	if len(in) == 0 {
+		return in
+	}
+	var nonTerminal []*api.RouteFilter
+	var redirect *api.RouteFilter
+	var direct *api.RouteFilter
+	for _, f := range in {
+		if f == nil || f.Kind == nil {
+			continue
+		}
+		switch f.Kind.(type) {
+		case *api.RouteFilter_RequestRedirect:
+			redirect = f
+		case *api.RouteFilter_DirectResponse:
+			direct = f
+		default:
+			nonTerminal = append(nonTerminal, f)
+		}
+	}
+	if redirect != nil {
+		return append(nonTerminal, redirect)
+	}
+	if direct != nil {
+		return append(nonTerminal, direct)
+	}
+	return nonTerminal
 }
 
 // TranslateTcpRoute translates a TcpRouteIR to agent gateway TCPRoute resources.

@@ -139,6 +139,8 @@ func TestBuildADPFilters(t *testing.T) {
 				},
 			}
 
+			// buildADPFilters is no longer used in the actual translation path; this test
+			// validates the helper behavior directly for parity
 			result, err := buildADPFilters(ctx, "default", tc.inputFilters)
 
 			if tc.expectedError {

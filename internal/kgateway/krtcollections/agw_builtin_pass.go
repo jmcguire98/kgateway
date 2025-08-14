@@ -1,6 +1,7 @@
 package krtcollections
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/agentgateway/agentgateway/go/api"
@@ -100,7 +101,7 @@ func (p *builtinPluginAgwPass) ApplyForRoute(pctx *pluginsdkir.RouteContext, rou
 				Scheme: "",
 				Host:   redir.GetHostRedirect(),
 				Port:   redir.GetPortRedirect(),
-				Status: uint32(redir.GetResponseCode()),
+				Status: mapRedirectEnumToHTTP(redir.GetResponseCode()),
 			}
 			switch x := redir.GetPathRewriteSpecifier().(type) {
 			case *envoyroutev3.RedirectAction_PathRedirect:
@@ -168,5 +169,23 @@ func applyRetryToAgwRoute(route *api.Route, r *envoyroutev3.RetryPolicy) {
 	}
 	if bo := r.RetryBackOff; bo != nil && bo.BaseInterval != nil {
 		tp.Retry.Backoff = durationpb.New(bo.BaseInterval.AsDuration())
+	}
+}
+
+// mapRedirectEnumToHTTP converts Envoy redirect response code enum to numeric HTTP status
+func mapRedirectEnumToHTTP(code envoyroutev3.RedirectAction_RedirectResponseCode) uint32 {
+	switch code {
+	case envoyroutev3.RedirectAction_MOVED_PERMANENTLY:
+		return http.StatusMovedPermanently
+	case envoyroutev3.RedirectAction_FOUND:
+		return http.StatusFound
+	case envoyroutev3.RedirectAction_SEE_OTHER:
+		return http.StatusSeeOther
+	case envoyroutev3.RedirectAction_TEMPORARY_REDIRECT:
+		return http.StatusTemporaryRedirect
+	case envoyroutev3.RedirectAction_PERMANENT_REDIRECT:
+		return http.StatusPermanentRedirect
+	default:
+		return http.StatusFound
 	}
 }

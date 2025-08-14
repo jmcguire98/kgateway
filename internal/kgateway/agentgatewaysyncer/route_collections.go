@@ -22,6 +22,8 @@ import (
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"errors"
+
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/query"
@@ -58,13 +60,33 @@ func translateHttpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, 
 		return nil
 	}
 	matches := httproute.TranslateGatewayHTTPRouteRules(translationCtx, routeInfo, routeReporter.ParentRef(&parentRefs[0].OriginalReference), rep)
+	// Inspect IR for extension-ref resolution errors (e.g., missing DirectResponse)
+	if cond := acceptanceConditionFromIR(httpIR); cond != nil {
+		// seed failure early; still attempt translation for consistency with previous behavior
+		// downstream will set condition on parent ref
+	}
+
 	routesOut, _, err := routeTranslator.TranslateHttpMatches(httpIR, matches, passes)
 	var gwResult conversionResult[ADPRoute]
 	if err != nil {
-		gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
+		if errors.Is(err, agwtranslator.ErrIncompatibleTerminalFilters) {
+			// Keep routes, but mark Accepted=False with IncompatibleFilters
+			for _, r := range routesOut {
+				gwResult.routes = append(gwResult.routes, ADPRoute{Route: r})
+			}
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: gwv1.RouteReasonIncompatibleFilters, Message: "terminal filter"}
+		} else {
+			gwResult.error = &reporter.RouteCondition{Type: gwv1.RouteConditionAccepted, Status: metav1.ConditionFalse, Reason: reporter.RouteRuleDroppedReason}
+		}
 	} else {
 		for _, r := range routesOut {
 			gwResult.routes = append(gwResult.routes, ADPRoute{Route: r})
+		}
+	}
+	// If translation succeeded but IR indicated a missing DirectResponse, surface Accepted=False
+	if gwResult.error == nil {
+		if cond := acceptanceConditionFromIR(httpIR); cond != nil {
+			gwResult.error = cond
 		}
 	}
 	attachedRoutes := buildAttachedRoutesMap(parentRefs)
@@ -83,6 +105,42 @@ func translateHttpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, 
 		results = append(results, toResourceWithRoutes(gw, res, attachedRoutes[gw], rm))
 	}
 	return results
+}
+
+// acceptanceConditionFromIR inspects IR rule errors to produce an Accepted=False condition
+// for missing DirectResponse extension references. The error string from resolution looks like:
+// "gateway.kgateway.dev/DirectResponse/<ns>/<name>: policy not found"
+func acceptanceConditionFromIR(httpIR pluginsdkir.HttpRouteIR) *reporter.RouteCondition {
+	for _, rule := range httpIR.Rules {
+		if rule.Err == nil {
+			continue
+		}
+		msg := rule.Err.Error()
+		if strings.Contains(msg, "DirectResponse") && strings.Contains(msg, "policy not found") {
+			// Extract <ns>/<name>
+			// Split on '/' and take the last two elements before the trailing text
+			parts := strings.Split(msg, "/")
+			ref := ""
+			if len(parts) >= 2 {
+				tail := parts[len(parts)-1]
+				// tail is "<name>: policy not found"
+				name := strings.SplitN(tail, ":", 2)[0]
+				ns := parts[len(parts)-2]
+				ref = ns + "/" + name
+			}
+			// Fallback to namespace from IR if we failed to parse
+			if ref == "" {
+				ref = httpIR.Namespace + "/"
+			}
+			return &reporter.RouteCondition{
+				Type:    gwv1.RouteConditionAccepted,
+				Status:  metav1.ConditionFalse,
+				Reason:  gwv1.RouteReasonBackendNotFound,
+				Message: "DirectResponse " + ref + " not found",
+			}
+		}
+	}
+	return nil
 }
 
 func translateTcpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, routeTranslator *agwtranslator.AgentGatewayRouteTranslator, tcp pluginsdkir.TcpRouteIR) []ADPResourcesForGateway {
@@ -426,6 +484,18 @@ func newAgentGatewayPasses(plugs pluginsdk.Plugin,
 		out[pluginsdkir.VirtualBuiltInGK] = plugin.NewAgentGatewayPass(rep)
 	}
 	if len(aps.Policies) == 0 {
+		// Even if no route-level policies are attached, extension refs may appear
+		// on rules/backends. Instantiate passes for all contributed policies so
+		// ApplyForRoute/ApplyForRouteBackend can run when referenced.
+		for gk, plugin := range plugs.ContributesPolicies {
+			if _, exists := out[gk]; exists {
+				continue
+			}
+			if plugin.NewAgentGatewayPass == nil {
+				continue
+			}
+			out[gk] = plugin.NewAgentGatewayPass(rep)
+		}
 		return out
 	}
 	for gk := range aps.Policies {

@@ -5,11 +5,13 @@ import (
 	"strings"
 
 	"github.com/agentgateway/agentgateway/go/api"
+	"github.com/golang/protobuf/ptypes/duration"
 	"istio.io/istio/pkg/slices"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
 )
 
@@ -155,6 +157,182 @@ func createADPResponseHeadersFilter(filter *gwv1.HTTPHeaderFilter) *api.RouteFil
 				Remove: filter.Remove,
 			},
 		},
+	}
+}
+
+// terminalFilterCombinationError creates a standardized error message for when multiple terminal filters are used together
+func terminalFilterCombinationError(existingFilter, newFilter string) string {
+	return fmt.Sprintf("Cannot combine multiple terminal filters: %s and %s are mutually exclusive. Only one terminal filter is allowed per route rule.", existingFilter, newFilter)
+}
+
+// buildADPFilters converts HTTPRoute filters to ADP filters, returning an optional error condition
+func buildADPFilters(
+	ctx RouteContext,
+	ns string,
+	inputFilters []gwv1.HTTPRouteFilter,
+) ([]*api.RouteFilter, *reporter.RouteCondition) {
+	var filters []*api.RouteFilter
+
+	var hasTerminalFilter bool
+	var terminalFilterType string
+
+	var filterError *reporter.RouteCondition
+
+	for _, filter := range inputFilters {
+		switch filter.Type {
+		case gwv1.HTTPRouteFilterRequestHeaderModifier:
+			h := createADPHeadersFilter(filter.RequestHeaderModifier)
+			if h == nil {
+				continue
+			}
+			filters = append(filters, h)
+		case gwv1.HTTPRouteFilterResponseHeaderModifier:
+			h := createADPResponseHeadersFilter(filter.ResponseHeaderModifier)
+			if h == nil {
+				continue
+			}
+			filters = append(filters, h)
+		case gwv1.HTTPRouteFilterRequestRedirect:
+			if hasTerminalFilter {
+				filterError = &reporter.RouteCondition{
+					Type:    gwv1.RouteConditionAccepted,
+					Status:  metav1.ConditionFalse,
+					Reason:  gwv1.RouteReasonIncompatibleFilters,
+					Message: terminalFilterCombinationError(terminalFilterType, "RequestRedirect"),
+				}
+				continue
+			}
+			h := createADPRedirectFilter(filter.RequestRedirect)
+			if h == nil {
+				continue
+			}
+			filters = append(filters, h)
+			hasTerminalFilter = true
+			terminalFilterType = "RequestRedirect"
+		case gwv1.HTTPRouteFilterRequestMirror:
+			h, err := createADPMirrorFilter(ctx, filter.RequestMirror, ns, schema.GroupVersionKind{
+				Group:   "gateway.networking.k8s.io",
+				Version: "v1",
+				Kind:    "HTTPRoute",
+			})
+			if err != nil {
+				if filterError == nil {
+					filterError = err
+				}
+			} else {
+				filters = append(filters, h)
+			}
+		case gwv1.HTTPRouteFilterURLRewrite:
+			h := createADPRewriteFilter(filter.URLRewrite)
+			if h == nil {
+				continue
+			}
+			filters = append(filters, h)
+		case gwv1.HTTPRouteFilterCORS:
+			h := createADPCorsFilter(filter.CORS)
+			if h == nil {
+				continue
+			}
+			filters = append(filters, h)
+		case gwv1.HTTPRouteFilterExtensionRef:
+			h, err := createADPExtensionRefFilter(ctx, filter.ExtensionRef, ns)
+			if err != nil {
+				if filterError == nil {
+					filterError = err
+				}
+				continue
+			} else if h != nil {
+				if _, ok := h.Kind.(*api.RouteFilter_DirectResponse); ok {
+					if hasTerminalFilter {
+						filterError = &reporter.RouteCondition{
+							Type:    gwv1.RouteConditionAccepted,
+							Status:  metav1.ConditionFalse,
+							Reason:  gwv1.RouteReasonIncompatibleFilters,
+							Message: terminalFilterCombinationError(terminalFilterType, "DirectResponse"),
+						}
+						continue
+					}
+					hasTerminalFilter = true
+					terminalFilterType = "DirectResponse"
+				}
+				filters = append(filters, h)
+			}
+		default:
+			return nil, &reporter.RouteCondition{
+				Type:    gwv1.RouteConditionAccepted,
+				Status:  metav1.ConditionFalse,
+				Reason:  gwv1.RouteReasonIncompatibleFilters,
+				Message: fmt.Sprintf("unsupported filter type %q", filter.Type),
+			}
+		}
+	}
+	return filters, filterError
+}
+
+func createADPCorsFilter(cors *gwv1.HTTPCORSFilter) *api.RouteFilter {
+	if cors == nil {
+		return nil
+	}
+	return &api.RouteFilter{
+		Kind: &api.RouteFilter_Cors{Cors: &api.CORS{
+			AllowCredentials: bool(cors.AllowCredentials),
+			AllowHeaders:     slices.Map(cors.AllowHeaders, func(h gwv1.HTTPHeaderName) string { return string(h) }),
+			AllowMethods:     slices.Map(cors.AllowMethods, func(m gwv1.HTTPMethodWithWildcard) string { return string(m) }),
+			AllowOrigins:     slices.Map(cors.AllowOrigins, func(o gwv1.AbsoluteURI) string { return string(o) }),
+			ExposeHeaders:    slices.Map(cors.ExposeHeaders, func(h gwv1.HTTPHeaderName) string { return string(h) }),
+			MaxAge: &duration.Duration{
+				Seconds: int64(cors.MaxAge),
+			},
+		}},
+	}
+}
+
+// createADPExtensionRefFilter creates ADP filter from Gateway API ExtensionRef filter
+func createADPExtensionRefFilter(
+	ctx RouteContext,
+	extensionRef *gwv1.LocalObjectReference,
+	ns string,
+) (*api.RouteFilter, *reporter.RouteCondition) {
+	if extensionRef == nil {
+		return nil, nil
+	}
+
+	// Check if it's a DirectResponse reference
+	if string(extensionRef.Group) == wellknown.DirectResponseGVK.Group && string(extensionRef.Kind) == wellknown.DirectResponseGVK.Kind {
+		// Look up the DirectResponse resource
+		directResponse := findDirectResponse(ctx, string(extensionRef.Name), ns)
+		if directResponse == nil {
+			return nil, &reporter.RouteCondition{
+				Type:    gwv1.RouteConditionAccepted,
+				Status:  metav1.ConditionFalse,
+				Reason:  gwv1.RouteReasonBackendNotFound,
+				Message: fmt.Sprintf("DirectResponse %s/%s not found", ns, extensionRef.Name),
+			}
+		}
+
+		// Convert to ADP DirectResponse filter
+		filter := &api.RouteFilter{
+			Kind: &api.RouteFilter_DirectResponse{
+				DirectResponse: &api.DirectResponse{
+					Status: directResponse.Spec.StatusCode,
+				},
+			},
+		}
+
+		// Add body if specified
+		if directResponse.Spec.Body != nil {
+			filter.GetDirectResponse().Body = []byte(*directResponse.Spec.Body)
+		}
+
+		return filter, nil
+	}
+
+	// Unsupported ExtensionRef
+	return nil, &reporter.RouteCondition{
+		Type:    gwv1.RouteConditionAccepted,
+		Status:  metav1.ConditionFalse,
+		Reason:  gwv1.RouteReasonIncompatibleFilters,
+		Message: fmt.Sprintf("unsupported ExtensionRef: %s/%s", extensionRef.Group, extensionRef.Kind),
 	}
 }
 
