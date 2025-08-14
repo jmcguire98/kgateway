@@ -2,6 +2,7 @@ package ir
 
 import (
 	"github.com/agentgateway/agentgateway/go/api"
+
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 )
 
