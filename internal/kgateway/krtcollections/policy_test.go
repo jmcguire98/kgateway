@@ -541,6 +541,11 @@ func k8sSvcUpstreams(services krt.Collection[*corev1.Service]) krt.Collection[ir
 	})
 }
 
+// K8sServiceBackendsForTests exposes a simple K8s Service -> BackendObjectIR collection for unit tests
+func K8sServiceBackendsForTests(services krt.Collection[*corev1.Service]) krt.Collection[ir.BackendObjectIR] {
+	return k8sSvcUpstreams(services)
+}
+
 func infPoolUpstreams(poolCol krt.Collection[*infextv1a2.InferencePool]) krt.Collection[ir.BackendObjectIR] {
 	return krt.NewCollection(poolCol, func(kctx krt.HandlerContext, pool *infextv1a2.InferencePool) *ir.BackendObjectIR {
 		// Create a BackendObjectIR IR representation from the given InferencePool.

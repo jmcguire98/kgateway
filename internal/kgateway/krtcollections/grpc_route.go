@@ -169,12 +169,20 @@ func (h *RoutesIndex) convertGRPCBackendsToHTTP(kctx krt.HandlerContext, src ir.
 		} else if err == nil {
 			err = &NotFoundError{NotFoundObj: toFromBackendRef(src.Namespace, ref.BackendObjectReference)}
 		}
+		// Capture the originally requested reference/port for downstream translators
+		requested := toFromBackendRef(src.Namespace, ref.BackendObjectReference)
+		var requestedPort int32
+		if ref.BackendRef.Port != nil {
+			requestedPort = int32(*ref.BackendRef.Port)
+		}
 		httpBackends = append(httpBackends, ir.HttpBackendOrDelegate{
 			Backend: &ir.BackendRefIR{
 				BackendObject: backend,
 				ClusterName:   clusterName,
 				Weight:        weight(ref.Weight),
 				Err:           err,
+				RequestedRef:  requested,
+				RequestedPort: requestedPort,
 			},
 		})
 	}

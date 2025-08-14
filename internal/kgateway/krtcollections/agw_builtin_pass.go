@@ -1,7 +1,10 @@
 package krtcollections
 
 import (
+	"time"
+
 	"github.com/agentgateway/agentgateway/go/api"
+	envoycorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoyroutev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -32,6 +35,98 @@ func (p *builtinPluginAgwPass) ApplyForRoute(pctx *pluginsdkir.RouteContext, rou
 	}
 	applyTimeoutsToAgwRoute(route, pol.rule.timeouts)
 	applyRetryToAgwRoute(route, pol.rule.retry)
+	// If a CORS policy is present at route scope, translate it to Agent Gateway filter
+	if pol.filter != nil {
+		switch v := pol.filter.policy.(type) {
+		case *corsIr:
+			c := v
+			if c == nil || c.Cfg == nil {
+				break
+			}
+			// build Agent Gateway CORS filter from the original GW API config
+			cors := &api.CORS{
+				AllowCredentials: bool(c.Cfg.AllowCredentials),
+				AllowHeaders:     nil,
+				AllowMethods:     nil,
+				AllowOrigins:     nil,
+				ExposeHeaders:    nil,
+			}
+			for _, h := range c.Cfg.AllowHeaders {
+				cors.AllowHeaders = append(cors.AllowHeaders, string(h))
+			}
+			for _, m := range c.Cfg.AllowMethods {
+				cors.AllowMethods = append(cors.AllowMethods, string(m))
+			}
+			for _, o := range c.Cfg.AllowOrigins {
+				cors.AllowOrigins = append(cors.AllowOrigins, string(o))
+			}
+			for _, h := range c.Cfg.ExposeHeaders {
+				cors.ExposeHeaders = append(cors.ExposeHeaders, string(h))
+			}
+			// Upstream Gateway API uses int32 seconds for MaxAge
+			if c.Cfg.MaxAge > 0 {
+				cors.MaxAge = durationpb.New(time.Duration(c.Cfg.MaxAge) * time.Second)
+			}
+			route.Filters = append(route.Filters, &api.RouteFilter{Kind: &api.RouteFilter_Cors{Cors: cors}})
+		case *headerModifierIr:
+			hm := v
+			if hm == nil {
+				break
+			}
+			// Translate Add/Set semantics into Set for deterministic output; preserve Remove
+			toHeaders := func(add []*envoycorev3.HeaderValueOption) []*api.Header {
+				var out []*api.Header
+				for _, h := range add {
+					if h == nil || h.Header == nil {
+						continue
+					}
+					out = append(out, &api.Header{Name: h.Header.Key, Value: h.Header.Value})
+				}
+				return out
+			}
+			mod := &api.HeaderModifier{Set: toHeaders(hm.Add), Remove: hm.Remove}
+			if hm.IsRequest {
+				route.Filters = append(route.Filters, &api.RouteFilter{Kind: &api.RouteFilter_RequestHeaderModifier{RequestHeaderModifier: mod}})
+			} else {
+				route.Filters = append(route.Filters, &api.RouteFilter{Kind: &api.RouteFilter_ResponseHeaderModifier{ResponseHeaderModifier: mod}})
+			}
+		case *requestRedirectIr:
+			rr := v
+			if rr == nil || rr.Redir == nil {
+				break
+			}
+			redir := rr.Redir
+			rf := &api.RequestRedirect{
+				Scheme: "",
+				Host:   redir.GetHostRedirect(),
+				Port:   redir.GetPortRedirect(),
+				Status: uint32(redir.GetResponseCode()),
+			}
+			switch x := redir.GetPathRewriteSpecifier().(type) {
+			case *envoyroutev3.RedirectAction_PathRedirect:
+				rf.Path = &api.RequestRedirect_Full{Full: x.PathRedirect}
+			case *envoyroutev3.RedirectAction_PrefixRewrite:
+				rf.Path = &api.RequestRedirect_Prefix{Prefix: x.PrefixRewrite}
+			}
+			route.Filters = append(route.Filters, &api.RouteFilter{Kind: &api.RouteFilter_RequestRedirect{RequestRedirect: rf}})
+		case *urlRewriteIr:
+			ur := v
+			if ur == nil {
+				break
+			}
+			uf := &api.UrlRewrite{Host: ""}
+			if ur.HostRewrite != nil {
+				uf.Host = ur.HostRewrite.HostRewriteLiteral
+			}
+			if ur.FullReplace != "" {
+				uf.Path = &api.UrlRewrite_Full{Full: ur.FullReplace}
+			}
+			if ur.PrefixReplace != "" {
+				uf.Path = &api.UrlRewrite_Prefix{Prefix: ur.PrefixReplace}
+			}
+			route.Filters = append(route.Filters, &api.RouteFilter{Kind: &api.RouteFilter_UrlRewrite{UrlRewrite: uf}})
+		}
+	}
 	return nil
 }
 

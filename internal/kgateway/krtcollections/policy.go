@@ -210,7 +210,8 @@ func (i *BackendIndex) getBackendFromAlias(kctx krt.HandlerContext, gk schema.Gr
 	}
 
 	if !didFetch {
-		return nil, ErrUnknownBackendKind
+		// Wrap with a descriptive message while preserving ErrUnknownBackendKind for errors.Is checks
+		return nil, fmt.Errorf("referencing unsupported backendRef: group %q kind %q: %w", gk.Group, gk.Kind, ErrUnknownBackendKind)
 	}
 
 	var out *ir.BackendObjectIR
@@ -1321,12 +1322,21 @@ func (h *RoutesIndex) getBackends(kctx krt.HandlerContext, src ir.ObjectSource, 
 		} else if err == nil {
 			err = &NotFoundError{NotFoundObj: to}
 		}
+		// Populate RequestedRef/RequestedPort so downstream translators can emit intended
+		// targets even if resolution failed
+		requested := toFromBackendRef(fromns, ref.BackendRef.BackendObjectReference)
+		requestedPort := int32(0)
+		if ref.BackendRef.Port != nil {
+			requestedPort = int32(*ref.BackendRef.Port)
+		}
 		backends = append(backends, ir.HttpBackendOrDelegate{
 			Backend: &ir.BackendRefIR{
 				BackendObject: backend,
 				ClusterName:   clusterName,
 				Weight:        weight(ref.Weight),
 				Err:           err,
+				RequestedRef:  requested,
+				RequestedPort: requestedPort,
 			},
 			AttachedPolicies: extensionRefs,
 		})

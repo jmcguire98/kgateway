@@ -824,6 +824,8 @@ func convertURLRewriteIR(_ krt.HandlerContext, config *gwv1.HTTPURLRewriteFilter
 // ========
 type corsIr struct {
 	Cors *anypb.Any
+	// Carry original Gateway API CORS config for Agent Gateway translation
+	Cfg *gwv1.HTTPCORSFilter
 }
 
 func (c *corsIr) apply(
@@ -857,5 +859,5 @@ func convertCORSIR(_ krt.HandlerContext, f *gwv1.HTTPCORSFilter) *corsIr {
 		logger.Error("failed to convert CORS policy to Any", "error", err)
 		return nil
 	}
-	return &corsIr{Cors: corsPolicyAny}
+	return &corsIr{Cors: corsPolicyAny, Cfg: f}
 }

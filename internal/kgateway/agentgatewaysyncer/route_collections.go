@@ -17,7 +17,7 @@ import (
 	"istio.io/istio/pkg/util/sets"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -42,10 +42,21 @@ func translateHttpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, 
 	rm := reports.NewReportMap()
 	rep := reports.NewReporter(&rm)
 	routeReporter := rep.Route(httpIR.SourceObject)
-	parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, wellknown.HTTPRouteGVK)
+	// Use GRPCRoute kind when translating normalized GRPC-as-HTTP IRs to satisfy AllowedKinds checks
+	routeKind := wellknown.HTTPRouteGVK
+	if httpIR.ObjectSource.Kind == wellknown.GRPCRouteKind {
+		routeKind = wellknown.GRPCRouteGVK
+	}
+	parentRefs := buildParentReferencesForIR(ctx, httpIR.ParentRefs, toGWHostnames(httpIR.Hostnames), httpIR.Namespace, routeKind)
 	passes := newAgentGatewayPasses(inputs.Plugins, rep, httpIR.AttachedPolicies)
 	translationCtx := context.WithoutCancel(context.Background())
+	if len(parentRefs) == 0 {
+		return nil
+	}
 	routeInfo := inputs.Queries.GetRouteChain(krtctx, translationCtx, &httpIR, httpIR.GetHostnames(), parentRefs[0].OriginalReference)
+	if routeInfo == nil {
+		return nil
+	}
 	matches := httproute.TranslateGatewayHTTPRouteRules(translationCtx, routeInfo, routeReporter.ParentRef(&parentRefs[0].OriginalReference), rep)
 	routesOut, _, err := routeTranslator.TranslateHttpMatches(httpIR, matches, passes)
 	var gwResult conversionResult[ADPRoute]
@@ -61,7 +72,10 @@ func translateHttpIRToADP(krtctx krt.HandlerContext, inputs RouteContextInputs, 
 		inner := protomarshal.Clone(e.Route)
 		_, name, _ := strings.Cut(parent.InternalName, "/")
 		inner.ListenerKey = name
-		inner.Key = inner.GetKey() + "." + string(parent.ParentSection)
+		suffix := "." + string(parent.ParentSection)
+		if !strings.HasSuffix(inner.GetKey(), suffix) {
+			inner.Key = inner.GetKey() + suffix
+		}
 		return toADPResource(ADPRoute{Route: inner})
 	})
 	var results []ADPResourcesForGateway
@@ -407,17 +421,19 @@ func newAgentGatewayPasses(plugs pluginsdk.Plugin,
 	rep reporter.Reporter,
 	aps pluginsdkir.AttachedPolicies) map[schema.GroupKind]agwir.AgentGatewayTranslationPass {
 	out := map[schema.GroupKind]agwir.AgentGatewayTranslationPass{}
+	// Always include the builtin pass so rule-level builtins (timeouts/retries) are applied
+	if plugin, ok := plugs.ContributesPolicies[pluginsdkir.VirtualBuiltInGK]; ok && plugin.NewAgentGatewayPass != nil {
+		out[pluginsdkir.VirtualBuiltInGK] = plugin.NewAgentGatewayPass(rep)
+	}
 	if len(aps.Policies) == 0 {
 		return out
 	}
-	for gk, paList := range aps.Policies {
+	for gk := range aps.Policies {
 		plugin, ok := plugs.ContributesPolicies[gk]
 		if !ok || plugin.NewAgentGatewayPass == nil {
 			continue
 		}
-		if len(paList) == 0 && gk != pluginsdkir.VirtualBuiltInGK {
-			continue
-		}
+		// Instantiate pass for any GK that appears in attached policies
 		out[gk] = plugin.NewAgentGatewayPass(rep)
 	}
 	return out

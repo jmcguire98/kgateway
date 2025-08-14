@@ -261,6 +261,14 @@ type BackendRefIR struct {
 	BackendObject *BackendObjectIR
 	// if nil, error might say why
 	Err error
+
+	// RequestedRef captures the original backend reference (group, kind, ns/name)
+	// from the route, regardless of whether it resolved to a BackendObject.
+	// This enables downstream translators to surface intent even when resolution fails.
+	RequestedRef ObjectSource
+	// RequestedPort captures the originally requested port from the backend ref, if any.
+	// Useful for surfacing the intended destination when the backend is missing.
+	RequestedPort int32
 }
 
 type HttpBackendOrDelegate struct {

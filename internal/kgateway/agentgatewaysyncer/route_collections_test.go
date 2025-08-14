@@ -9,9 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	networkingclient "istio.io/client-go/pkg/apis/networking/v1"
+	"istio.io/istio/pkg/kube/krt"
 	krttest "istio.io/istio/pkg/kube/krt/krttest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
@@ -21,9 +23,12 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/query"
 	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	agwtranslator "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/translator"
+	common "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/collections"
+	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 
 	// removed: collections.NewCommonCollections; tests construct minimal indices directly
 	"github.com/kgateway-dev/kgateway/v2/pkg/settings"
@@ -841,7 +846,32 @@ func TestADPRouteCollection(t *testing.T) {
 
 			routeParents := BuildRouteParents(gateways)
 			refGrants := BuildReferenceGrants(refGrantsCollection)
+			// Create KRT options
+			krtopts := krtinternal.KrtOptions{}
+
+			// Build indices
+			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
+			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
+			// Register Kubernetes Service backends so RoutesIndex can resolve Service backendRefs
+			backendIdx.AddBackends(schema.GroupKind{Group: "", Kind: "Service"}, krt.NewManyCollection(services, func(kctx krt.HandlerContext, svc *corev1.Service) []pluginsdkir.BackendObjectIR {
+				var out []pluginsdkir.BackendObjectIR
+				for _, port := range svc.Spec.Ports {
+					objSrc := pluginsdkir.ObjectSource{Group: "", Kind: "Service", Namespace: svc.Namespace, Name: svc.Name}
+					bo := pluginsdkir.NewBackendObjectIR(objSrc, port.Port, "")
+					bo.Obj = svc
+					bo.CanonicalHostname = svc.Name + "." + svc.Namespace + ".svc.cluster.local"
+					out = append(out, bo)
+				}
+				return out
+			}))
+			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
+
+			// Minimal Queries impl backed by the test-built RoutesIndex
+			commonCols := &common.CommonCollections{Routes: routesIdx}
+
 			// Create route context inputs
+			// Use builtin plugin so AGW passes (timeouts/retries/filters) are applied
+			builtinPlugin := krtcollections.NewBuiltinPlugin(context.Background())
 			routeInputs := RouteContextInputs{
 				Grants:         refGrants,
 				RouteParents:   routeParents,
@@ -849,18 +879,14 @@ func TestADPRouteCollection(t *testing.T) {
 				Namespaces:     namespaces,
 				ServiceEntries: serviceEntries,
 				InferencePools: inferencePools,
+				Queries:        query.NewData(commonCols),
+				Plugins:        builtinPlugin,
 			}
-
-			// Create KRT options
-			krtopts := krtinternal.KrtOptions{}
 
 			// Call ADPRouteCollection
 			// Do not build a krtcollections.RefGrantIndex here; tests use the agent gateway specific ReferenceGrants wrapper.
 			// Pass nil for refgrants to NewBackendIndex/NewRoutesIndex.
-			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
-			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
-			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
-			adpRoutes := ADPRouteCollectionFromRoutesIndex(routesIdx, routeInputs, krtopts, agwtranslator.NewAgentGatewayRouteTranslator(extensionsplug.Plugin{}))
+			adpRoutes := ADPRouteCollectionFromRoutesIndex(routesIdx, routeInputs, krtopts, agwtranslator.NewAgentGatewayRouteTranslator(builtinPlugin))
 
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())
@@ -1454,7 +1480,26 @@ func TestADPRouteCollectionGRPC(t *testing.T) {
 
 			routeParents := BuildRouteParents(gateways)
 			refGrants := BuildReferenceGrants(refGrantsCollection)
-			// Create route context inputs
+			// Create KRT options
+			krtopts := krtinternal.KrtOptions{}
+			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
+			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
+			// Register Kubernetes Service backends so RoutesIndex can resolve Service backendRefs
+			backendIdx.AddBackends(schema.GroupKind{Group: "", Kind: "Service"}, krt.NewManyCollection(services, func(kctx krt.HandlerContext, svc *corev1.Service) []pluginsdkir.BackendObjectIR {
+				var out []pluginsdkir.BackendObjectIR
+				for _, port := range svc.Spec.Ports {
+					objSrc := pluginsdkir.ObjectSource{Group: "", Kind: "Service", Namespace: svc.Namespace, Name: svc.Name}
+					bo := pluginsdkir.NewBackendObjectIR(objSrc, port.Port, "")
+					bo.Obj = svc
+					bo.CanonicalHostname = svc.Name + "." + svc.Namespace + ".svc.cluster.local"
+					out = append(out, bo)
+				}
+				return out
+			}))
+			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
+			commonCols := &common.CommonCollections{Routes: routesIdx}
+			// Use builtin plugin so AGW passes (timeouts/retries/filters) are applied
+			builtinPlugin := krtcollections.NewBuiltinPlugin(context.Background())
 			routeInputs := RouteContextInputs{
 				Grants:         refGrants,
 				RouteParents:   routeParents,
@@ -1462,16 +1507,12 @@ func TestADPRouteCollectionGRPC(t *testing.T) {
 				Namespaces:     namespaces,
 				ServiceEntries: serviceEntries,
 				InferencePools: inferencePools,
+				Queries:        query.NewData(commonCols),
+				Plugins:        builtinPlugin,
 			}
 
-			// Create KRT options
-			krtopts := krtinternal.KrtOptions{}
-
 			// Call ADPRouteCollection
-			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
-			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
-			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
-			adpRoutes := ADPRouteCollectionFromRoutesIndex(routesIdx, routeInputs, krtopts, agwtranslator.NewAgentGatewayRouteTranslator(extensionsplug.Plugin{}))
+			adpRoutes := ADPRouteCollectionFromRoutesIndex(routesIdx, routeInputs, krtopts, agwtranslator.NewAgentGatewayRouteTranslator(builtinPlugin))
 
 			// Wait for the collection to process
 			adpRoutes.WaitUntilSynced(context.Background().Done())
@@ -1902,7 +1943,12 @@ func TestADPRouteCollectionWithFilters(t *testing.T) {
 
 			routeParents := BuildRouteParents(gateways)
 			refGrants := BuildReferenceGrants(refGrantsCollection)
-			// Create route context inputs
+			// Create KRT options
+			krtopts := krtinternal.KrtOptions{}
+			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
+			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
+			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
+			commonCols := &common.CommonCollections{Routes: routesIdx}
 			routeInputs := RouteContextInputs{
 				Grants:          refGrants,
 				RouteParents:    routeParents,
@@ -1911,15 +1957,10 @@ func TestADPRouteCollectionWithFilters(t *testing.T) {
 				ServiceEntries:  serviceEntries,
 				InferencePools:  inferencePools,
 				DirectResponses: directResponses,
+				Queries:         query.NewData(commonCols),
 			}
 
-			// Create KRT options
-			krtopts := krtinternal.KrtOptions{}
-
 			// Call ADPRouteCollection
-			policiesIdx := krtcollections.NewPolicyIndex(krtopts, extensionsplug.ContributesPolicies{}, settings.Settings{})
-			backendIdx := krtcollections.NewBackendIndex(krtopts, policiesIdx, nil)
-			routesIdx := krtcollections.NewRoutesIndex(krtopts, httpRoutes, grpcRoutes, tcpRoutes, tlsRoutes, policiesIdx, backendIdx, nil, settings.Settings{})
 			adpRoutes := ADPRouteCollectionFromRoutesIndex(routesIdx, routeInputs, krtopts, agwtranslator.NewAgentGatewayRouteTranslator(extensionsplug.Plugin{}))
 
 			// Wait for the collection to process
