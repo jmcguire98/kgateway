@@ -892,7 +892,6 @@ func TestADPRouteCollection(t *testing.T) {
 			routeResource := result.Resources[0].GetRoute()
 			require.NotNil(t, routeResource, "Route resource should not be nil")
 
-			// For this test group we do not assert on specific filters; that is covered in TestADPRouteCollectionWithFilters
 		})
 	}
 }
@@ -1357,7 +1356,7 @@ func TestADPRouteCollectionGRPC(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Prepare inputs
+
 			var inputs []any
 			for _, route := range tc.grpcRoutes {
 				inputs = append(inputs, route)
@@ -1450,7 +1449,6 @@ func TestADPRouteCollectionGRPC(t *testing.T) {
 			routeResource := result.Resources[0].GetRoute()
 			require.NotNil(t, routeResource, "Route resource should not be nil")
 
-			// Not asserting specific filters in this GRPC block
 		})
 	}
 }
@@ -1694,11 +1692,6 @@ func TestADPRouteCollectionWithFilters(t *testing.T) {
 
 			var inputs []any
 			inputs = []any{tc.httpRoute, service, namespace, gateway, refGrant}
-
-			// Add DirectResponse resources for the DirectResponse filter tests
-			if tc.name == "Route with DirectResponse ExtensionRef filter" {
-				// DirectResponse ExtensionRef behavior is now covered in the directresponse plugin tests
-			}
 
 			// Create mock collections
 			mock := krttest.NewMock(t, inputs)
