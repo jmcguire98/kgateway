@@ -18,6 +18,7 @@ import (
 
 const (
 	extauthPolicySuffix = ":extauth"
+	aiPolicySuffix      = ":ai"
 )
 
 // NewTrafficPlugin creates a new TrafficPolicy plugin
@@ -192,9 +193,9 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 		return nil
 	}
 
-	// Create prompt guard policy
-	promptGuardPolicy := &api.Policy{
-		Name:   policyName + ":promptguard",
+	// Create AI policy
+	aiPolicy := &api.Policy{
+		Name:   policyName + aiPolicySuffix,
 		Target: policyTarget,
 		Spec: &api.PolicySpec{
 			Kind: &api.PolicySpec_Ai_{
@@ -203,6 +204,29 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 				},
 			},
 		},
+	}
+
+	// Configure prompt enrichment if specified
+	if aiSpec.PromptEnrichment != nil {
+		enrichment := &api.PolicySpec_Ai_PromptEnrichment{}
+
+		// Add prepend messages
+		for _, msg := range aiSpec.PromptEnrichment.Prepend {
+			enrichment.Prepend = append(enrichment.Prepend, &api.PolicySpec_Ai_Message{
+				Role:    msg.Role,
+				Content: msg.Content,
+			})
+		}
+
+		// Add append messages
+		for _, msg := range aiSpec.PromptEnrichment.Append {
+			enrichment.Append = append(enrichment.Append, &api.PolicySpec_Ai_Message{
+				Role:    msg.Role,
+				Content: msg.Content,
+			})
+		}
+
+		aiPolicy.GetSpec().GetAi().Prompts = enrichment
 	}
 
 	// Configure request prompt guard if specified
@@ -215,6 +239,13 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 			pgReq.Rejection = &api.PolicySpec_Ai_RequestRejection{
 				Body:   []byte(*req.CustomResponse.Message),
 				Status: *req.CustomResponse.StatusCode,
+			}
+		}
+
+		if req.Webhook != nil {
+			pgReq.Webhook = &api.PolicySpec_Ai_Webhook{
+				Host: req.Webhook.Host.Host,
+				Port: uint32(req.Webhook.Host.Port),
 			}
 		}
 
@@ -255,12 +286,67 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 			}
 		}
 
-		promptGuardPolicy.GetSpec().GetAi().PromptGuard.Request = pgReq
+		aiPolicy.GetSpec().GetAi().PromptGuard.Request = pgReq
 	}
 
-	logger.Debug("generated PromptGuard policy",
-		"policy", trafficPolicy.Name,
-		"agentgateway_policy", promptGuardPolicy.Name)
+	// Configure response prompt guard if specified
+	if aiSpec.PromptGuard.Response != nil {
+		resp := aiSpec.PromptGuard.Response
+		pgResp := &api.PolicySpec_Ai_ResponseGuard{}
 
-	return []ADPPolicy{{Policy: promptGuardPolicy}}
+		// Add webhook if specified
+		if resp.Webhook != nil {
+			pgResp.Webhook = &api.PolicySpec_Ai_Webhook{
+				Host: resp.Webhook.Host.Host,
+				Port: uint32(resp.Webhook.Host.Port),
+			}
+		}
+
+		// Add regex patterns if specified
+		if resp.Regex != nil {
+			pgResp.Regex = &api.PolicySpec_Ai_RegexRules{}
+			if resp.Regex.Action != nil {
+				pgResp.Regex.Action = &api.PolicySpec_Ai_Action{}
+				if *resp.Regex.Action == v1alpha1.MASK {
+					pgResp.Regex.Action.Kind = api.PolicySpec_Ai_MASK
+				} else if *resp.Regex.Action == v1alpha1.REJECT {
+					pgResp.Regex.Action.Kind = api.PolicySpec_Ai_REJECT
+					pgResp.Regex.Action.RejectResponse = &api.PolicySpec_Ai_RequestRejection{}
+					// For response guard, we don't have custom response settings
+				} else {
+					logger.Warn("unsupported regex action", "action", *resp.Regex.Action)
+					pgResp.Regex.Action.Kind = api.PolicySpec_Ai_ACTION_UNSPECIFIED
+				}
+			}
+
+			// Add regex patterns
+			for _, match := range resp.Regex.Matches {
+				pgResp.Regex.Rules = append(pgResp.Regex.Rules, &api.PolicySpec_Ai_RegexRule{
+					Kind: &api.PolicySpec_Ai_RegexRule_Regex{
+						Regex: &api.PolicySpec_Ai_NamedRegex{
+							Pattern: *match.Pattern,
+							Name:    *match.Name,
+						},
+					},
+				})
+			}
+
+			// Add builtin patterns
+			for _, builtin := range resp.Regex.Builtins {
+				pgResp.Regex.Rules = append(pgResp.Regex.Rules, &api.PolicySpec_Ai_RegexRule{
+					Kind: &api.PolicySpec_Ai_RegexRule_Builtin{
+						Builtin: api.PolicySpec_Ai_BuiltinRegexRule(api.PolicySpec_Ai_BuiltinRegexRule_value[string(builtin)]),
+					},
+				})
+			}
+		}
+
+		aiPolicy.GetSpec().GetAi().PromptGuard.Response = pgResp
+	}
+
+	logger.Debug("generated AI policy",
+		"policy", trafficPolicy.Name,
+		"agentgateway_policy", aiPolicy.Name)
+
+	return []ADPPolicy{{Policy: aiPolicy}}
 }
