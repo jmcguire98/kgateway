@@ -108,12 +108,11 @@ func translateTrafficPolicyToADP(ctx krt.HandlerContext, gatewayExtensions krt.C
 		adpPolicies = append(adpPolicies, extAuthPolicies...)
 	}
 
-	// TODO: Add support for other policy types as needed:
-	// - RateLimit
-	// - Transformation
-	// - ExtProc
-	// - AI policies
-	// etc.
+	// Process AI policies if present
+	if trafficPolicy.Spec.AI != nil {
+		aiPolicies := processAIPolicy(ctx, trafficPolicy, policyName, policyTarget)
+		adpPolicies = append(adpPolicies, aiPolicies...)
+	}
 
 	return adpPolicies
 }
@@ -182,4 +181,86 @@ func processExtAuthPolicy(ctx krt.HandlerContext, gatewayExtensions krt.Collecti
 		"target", extauthSvcTarget)
 
 	return []ADPPolicy{{Policy: extauthPolicy}}
+}
+
+// processAIPolicy processes AI configuration and creates corresponding ADP policies
+func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPolicy, policyName string, policyTarget *api.PolicyTarget) []ADPPolicy {
+	logger := logging.New("agentgateway/plugins/traffic")
+
+	aiSpec := trafficPolicy.Spec.AI
+	if aiSpec.PromptGuard == nil {
+		return nil
+	}
+
+	// Create prompt guard policy
+	promptGuardPolicy := &api.Policy{
+		Name:   policyName + ":promptguard",
+		Target: policyTarget,
+		Spec: &api.PolicySpec{
+			Kind: &api.PolicySpec_Ai_{
+				Ai: &api.PolicySpec_Ai{
+					PromptGuard: &api.PolicySpec_Ai_PromptGuard{},
+				},
+			},
+		},
+	}
+
+	// Configure request prompt guard if specified
+	if aiSpec.PromptGuard.Request != nil {
+		req := aiSpec.PromptGuard.Request
+		pgReq := &api.PolicySpec_Ai_RequestGuard{}
+
+		// Add custom response if specified
+		if req.CustomResponse != nil {
+			pgReq.Rejection = &api.PolicySpec_Ai_RequestRejection{
+				Body:   []byte(*req.CustomResponse.Message),
+				Status: *req.CustomResponse.StatusCode,
+			}
+		}
+
+		// Add regex patterns if specified
+		if req.Regex != nil {
+			pgReq.Regex = &api.PolicySpec_Ai_RegexRules{}
+			if req.Regex.Action != nil {
+				pgReq.Regex.Action = &api.PolicySpec_Ai_Action{}
+				if *req.Regex.Action == v1alpha1.MASK {
+					pgReq.Regex.Action.Kind = api.PolicySpec_Ai_MASK
+				} else if *req.Regex.Action == v1alpha1.REJECT {
+					pgReq.Regex.Action.Kind = api.PolicySpec_Ai_REJECT
+					pgReq.Regex.Action.RejectResponse = &api.PolicySpec_Ai_RequestRejection{}
+					// TODO (jmcguire): it's not clear to me as yet how the user is so supposed to provide a different custom response
+					// for the reject action (as opposed to the top level custom response, but we do make a distinction in the dataplane)
+					// so i'm just using the top level custom response for now under the reject action
+					if req.CustomResponse != nil && req.CustomResponse.Message != nil {
+						pgReq.Regex.Action.RejectResponse.Body = []byte(*req.CustomResponse.Message)
+					}
+					if req.CustomResponse != nil && req.CustomResponse.StatusCode != nil {
+						pgReq.Regex.Action.RejectResponse.Status = *req.CustomResponse.StatusCode
+					}
+				} else {
+					logger.Warn("unsupported regex action", "action", *req.Regex.Action)
+					pgReq.Regex.Action.Kind = api.PolicySpec_Ai_ACTION_UNSPECIFIED
+				}
+			}
+
+			for _, match := range req.Regex.Matches {
+				pgReq.Regex.Rules = append(pgReq.Regex.Rules, &api.PolicySpec_Ai_RegexRule{
+					Kind: &api.PolicySpec_Ai_RegexRule_Regex{
+						Regex: &api.PolicySpec_Ai_NamedRegex{
+							Pattern: *match.Pattern,
+							Name:    *match.Name,
+						},
+					},
+				})
+			}
+		}
+
+		promptGuardPolicy.GetSpec().GetAi().PromptGuard.Request = pgReq
+	}
+
+	logger.Debug("generated PromptGuard policy",
+		"policy", trafficPolicy.Name,
+		"agentgateway_policy", promptGuardPolicy.Name)
+
+	return []ADPPolicy{{Policy: promptGuardPolicy}}
 }
