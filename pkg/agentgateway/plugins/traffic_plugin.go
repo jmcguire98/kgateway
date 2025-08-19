@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/agentgateway/agentgateway/go/api"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"istio.io/istio/pkg/kube/kclient"
 	"istio.io/istio/pkg/kube/krt"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -260,6 +261,10 @@ func createRequestGuard(req *v1alpha1.PromptguardRequest, logger *slog.Logger) *
 		pgReq.Regex = createRegex(req.Regex, req.CustomResponse, logger)
 	}
 
+	if req.Moderation != nil {
+		pgReq.OpenaiModeration = createModeration(req.Moderation)
+	}
+
 	return pgReq
 }
 
@@ -374,4 +379,50 @@ func createRegex(regex *v1alpha1.Regex, customResponse *v1alpha1.CustomResponse,
 	}
 
 	return rules
+}
+
+func createModeration(moderation *v1alpha1.Moderation) *api.PolicySpec_Ai_Moderation {
+	// right now we only support OpenAI moderation, so we can return nil if the moderation is nil or the OpenAIModeration is nil
+	if moderation == nil || moderation.OpenAIModeration == nil {
+		return nil
+	}
+
+	pgModeration := &api.PolicySpec_Ai_Moderation{}
+
+	if moderation.OpenAIModeration.Model != nil {
+		pgModeration.Model = &wrapperspb.StringValue{
+			Value: *moderation.OpenAIModeration.Model,
+		}
+	}
+
+	switch moderation.OpenAIModeration.AuthToken.Kind {
+	case v1alpha1.Inline:
+		if moderation.OpenAIModeration.AuthToken.Inline != nil {
+			pgModeration.Auth = &api.BackendAuthPolicy{
+				Kind: &api.BackendAuthPolicy_Key{
+					Key: &api.Key{
+						Secret: *moderation.OpenAIModeration.AuthToken.Inline,
+					},
+				},
+			}
+		}
+	case v1alpha1.SecretRef:
+		if moderation.OpenAIModeration.AuthToken.SecretRef != nil {
+			pgModeration.Auth = &api.BackendAuthPolicy{
+				Kind: &api.BackendAuthPolicy_Key{
+					Key: &api.Key{
+						Secret: moderation.OpenAIModeration.AuthToken.SecretRef.Name,
+					},
+				},
+			}
+		}
+	case v1alpha1.Passthrough:
+		pgModeration.Auth = &api.BackendAuthPolicy{
+			Kind: &api.BackendAuthPolicy_Passthrough{
+				Passthrough: &api.Passthrough{},
+			},
+		}
+	}
+
+	return pgModeration
 }
