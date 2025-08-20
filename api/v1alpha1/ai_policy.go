@@ -153,6 +153,7 @@ type Webhook struct {
 	Host Host `json:"host"`
 
 	// ForwardHeaders define headers to forward with the request to the webhook.
+	// Note: This is not yet supported for agentgateway.
 	ForwardHeaders []gwv1.HTTPHeaderMatch `json:"forwardHeaders,omitempty"`
 }
 
@@ -212,6 +213,7 @@ type PromptguardRequest struct {
 // PromptguardResponse configures the response that the prompt guard applies to responses returned by the LLM provider.
 // Both webhook and regex can be set, they will be executed in the following order: webhook → regex, where each step
 // can reject the request and stop further processing.
+// Note: This is not yet supported for agentgateway.
 type PromptguardResponse struct {
 	// Regular expression (regex) matching for prompt guards and data masking.
 	Regex *Regex `json:"regex,omitempty"`
