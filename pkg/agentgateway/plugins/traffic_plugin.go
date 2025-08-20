@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/agentgateway/agentgateway/go/api"
 	"istio.io/istio/pkg/kube/kclient"
@@ -193,7 +194,6 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 		return nil
 	}
 
-	// Create AI policy
 	aiPolicy := &api.Policy{
 		Name:   policyName + aiPolicySuffix,
 		Target: policyTarget,
@@ -201,147 +201,34 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 			Kind: &api.PolicySpec_Ai_{
 				Ai: &api.PolicySpec_Ai{
 					PromptGuard: &api.PolicySpec_Ai_PromptGuard{},
+					Prompts:     &api.PolicySpec_Ai_PromptEnrichment{},
+					Defaults:    make(map[string]string),
+					Overrides:   make(map[string]string),
 				},
 			},
 		},
 	}
 
-	// Configure prompt enrichment if specified
 	if aiSpec.PromptEnrichment != nil {
-		enrichment := &api.PolicySpec_Ai_PromptEnrichment{}
-
-		// Add prepend messages
-		for _, msg := range aiSpec.PromptEnrichment.Prepend {
-			enrichment.Prepend = append(enrichment.Prepend, &api.PolicySpec_Ai_Message{
-				Role:    msg.Role,
-				Content: msg.Content,
-			})
-		}
-
-		// Add append messages
-		for _, msg := range aiSpec.PromptEnrichment.Append {
-			enrichment.Append = append(enrichment.Append, &api.PolicySpec_Ai_Message{
-				Role:    msg.Role,
-				Content: msg.Content,
-			})
-		}
-
-		aiPolicy.GetSpec().GetAi().Prompts = enrichment
+		aiPolicy.GetSpec().GetAi().Prompts = createPromptEnrichment(aiSpec.PromptEnrichment)
 	}
 
-	// Configure request prompt guard if specified
+	if len(aiSpec.Defaults) > 0 {
+		for _, def := range aiSpec.Defaults {
+			if def.Override != nil && *def.Override {
+				aiPolicy.GetSpec().GetAi().Overrides[def.Field] = def.Value
+			} else {
+				aiPolicy.GetSpec().GetAi().Defaults[def.Field] = def.Value
+			}
+		}
+	}
+
 	if aiSpec.PromptGuard.Request != nil {
-		req := aiSpec.PromptGuard.Request
-		pgReq := &api.PolicySpec_Ai_RequestGuard{}
-
-		// Add custom response if specified
-		if req.CustomResponse != nil {
-			pgReq.Rejection = &api.PolicySpec_Ai_RequestRejection{
-				Body:   []byte(*req.CustomResponse.Message),
-				Status: *req.CustomResponse.StatusCode,
-			}
-		}
-
-		if req.Webhook != nil {
-			pgReq.Webhook = &api.PolicySpec_Ai_Webhook{
-				Host: req.Webhook.Host.Host,
-				Port: uint32(req.Webhook.Host.Port),
-			}
-		}
-
-		// Add regex patterns if specified
-		if req.Regex != nil {
-			pgReq.Regex = &api.PolicySpec_Ai_RegexRules{}
-			if req.Regex.Action != nil {
-				pgReq.Regex.Action = &api.PolicySpec_Ai_Action{}
-				if *req.Regex.Action == v1alpha1.MASK {
-					pgReq.Regex.Action.Kind = api.PolicySpec_Ai_MASK
-				} else if *req.Regex.Action == v1alpha1.REJECT {
-					pgReq.Regex.Action.Kind = api.PolicySpec_Ai_REJECT
-					pgReq.Regex.Action.RejectResponse = &api.PolicySpec_Ai_RequestRejection{}
-					// TODO (jmcguire): it's not clear to me as yet how the user is so supposed to provide a different custom response
-					// for the reject action (as opposed to the top level custom response, but we do make a distinction in the dataplane)
-					// so i'm just using the top level custom response for now under the reject action
-					if req.CustomResponse != nil && req.CustomResponse.Message != nil {
-						pgReq.Regex.Action.RejectResponse.Body = []byte(*req.CustomResponse.Message)
-					}
-					if req.CustomResponse != nil && req.CustomResponse.StatusCode != nil {
-						pgReq.Regex.Action.RejectResponse.Status = *req.CustomResponse.StatusCode
-					}
-				} else {
-					logger.Warn("unsupported regex action", "action", *req.Regex.Action)
-					pgReq.Regex.Action.Kind = api.PolicySpec_Ai_ACTION_UNSPECIFIED
-				}
-			}
-
-			for _, match := range req.Regex.Matches {
-				pgReq.Regex.Rules = append(pgReq.Regex.Rules, &api.PolicySpec_Ai_RegexRule{
-					Kind: &api.PolicySpec_Ai_RegexRule_Regex{
-						Regex: &api.PolicySpec_Ai_NamedRegex{
-							Pattern: *match.Pattern,
-							Name:    *match.Name,
-						},
-					},
-				})
-			}
-		}
-
-		aiPolicy.GetSpec().GetAi().PromptGuard.Request = pgReq
+		aiPolicy.GetSpec().GetAi().PromptGuard.Request = createRequestGuard(aiSpec.PromptGuard.Request, logger)
 	}
 
-	// Configure response prompt guard if specified
 	if aiSpec.PromptGuard.Response != nil {
-		resp := aiSpec.PromptGuard.Response
-		pgResp := &api.PolicySpec_Ai_ResponseGuard{}
-
-		// Add webhook if specified
-		if resp.Webhook != nil {
-			pgResp.Webhook = &api.PolicySpec_Ai_Webhook{
-				Host: resp.Webhook.Host.Host,
-				Port: uint32(resp.Webhook.Host.Port),
-			}
-		}
-
-		// Add regex patterns if specified
-		if resp.Regex != nil {
-			pgResp.Regex = &api.PolicySpec_Ai_RegexRules{}
-			if resp.Regex.Action != nil {
-				pgResp.Regex.Action = &api.PolicySpec_Ai_Action{}
-				if *resp.Regex.Action == v1alpha1.MASK {
-					pgResp.Regex.Action.Kind = api.PolicySpec_Ai_MASK
-				} else if *resp.Regex.Action == v1alpha1.REJECT {
-					pgResp.Regex.Action.Kind = api.PolicySpec_Ai_REJECT
-					pgResp.Regex.Action.RejectResponse = &api.PolicySpec_Ai_RequestRejection{}
-					// For response guard, we don't have custom response settings
-				} else {
-					logger.Warn("unsupported regex action", "action", *resp.Regex.Action)
-					pgResp.Regex.Action.Kind = api.PolicySpec_Ai_ACTION_UNSPECIFIED
-				}
-			}
-
-			// Add regex patterns
-			for _, match := range resp.Regex.Matches {
-				pgResp.Regex.Rules = append(pgResp.Regex.Rules, &api.PolicySpec_Ai_RegexRule{
-					Kind: &api.PolicySpec_Ai_RegexRule_Regex{
-						Regex: &api.PolicySpec_Ai_NamedRegex{
-							Pattern: *match.Pattern,
-							Name:    *match.Name,
-						},
-					},
-				})
-			}
-
-			// Add builtin patterns
-			for _, builtin := range resp.Regex.Builtins {
-				pgResp.Regex.Rules = append(pgResp.Regex.Rules, &api.PolicySpec_Ai_RegexRule{
-					Kind: &api.PolicySpec_Ai_RegexRule_Builtin{
-						Builtin: api.PolicySpec_Ai_BuiltinRegexRule(api.PolicySpec_Ai_BuiltinRegexRule_value[string(builtin)]),
-					},
-				})
-			}
-		}
-
-		aiPolicy.GetSpec().GetAi().PromptGuard.Response = pgResp
+		aiPolicy.GetSpec().GetAi().PromptGuard.Response = createResponseGuard(aiSpec.PromptGuard.Response, logger)
 	}
 
 	logger.Debug("generated AI policy",
@@ -349,4 +236,142 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 		"agentgateway_policy", aiPolicy.Name)
 
 	return []ADPPolicy{{Policy: aiPolicy}}
+}
+
+func createRequestGuard(req *v1alpha1.PromptguardRequest, logger *slog.Logger) *api.PolicySpec_Ai_RequestGuard {
+	if req == nil {
+		return nil
+	}
+
+	pgReq := &api.PolicySpec_Ai_RequestGuard{}
+
+	if req.CustomResponse != nil {
+		pgReq.Rejection = &api.PolicySpec_Ai_RequestRejection{
+			Body:   []byte(*req.CustomResponse.Message),
+			Status: *req.CustomResponse.StatusCode,
+		}
+	}
+
+	if req.Webhook != nil {
+		pgReq.Webhook = createWebhook(req.Webhook)
+	}
+
+	if req.Regex != nil {
+		pgReq.Regex = createRegex(req.Regex, req.CustomResponse, logger)
+	}
+
+	return pgReq
+}
+
+func createResponseGuard(resp *v1alpha1.PromptguardResponse, logger *slog.Logger) *api.PolicySpec_Ai_ResponseGuard {
+
+	pgResp := &api.PolicySpec_Ai_ResponseGuard{}
+
+	if resp.Webhook != nil {
+		pgResp.Webhook = createWebhook(resp.Webhook)
+	}
+
+	if resp.Regex != nil {
+		pgResp.Regex = createRegex(resp.Regex, nil, logger)
+	}
+
+	return pgResp
+}
+
+func createPromptEnrichment(enrichment *v1alpha1.AIPromptEnrichment) *api.PolicySpec_Ai_PromptEnrichment {
+	pgPromptEnrichment := &api.PolicySpec_Ai_PromptEnrichment{}
+
+	// Add prepend messages
+	for _, msg := range enrichment.Prepend {
+		pgPromptEnrichment.Prepend = append(pgPromptEnrichment.Prepend, &api.PolicySpec_Ai_Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	// Add append messages
+	for _, msg := range enrichment.Append {
+		pgPromptEnrichment.Append = append(pgPromptEnrichment.Append, &api.PolicySpec_Ai_Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	return pgPromptEnrichment
+}
+
+func createWebhook(webhook *v1alpha1.Webhook) *api.PolicySpec_Ai_Webhook {
+	if webhook == nil {
+		return nil
+	}
+	return &api.PolicySpec_Ai_Webhook{
+		Host: webhook.Host.Host,
+		Port: uint32(webhook.Host.Port),
+	}
+}
+
+// createBuiltinRegexRule creates a regex rule for a builtin pattern, handling unknown patterns gracefully
+func createBuiltinRegexRule(builtin v1alpha1.BuiltIn, logger *slog.Logger) *api.PolicySpec_Ai_RegexRule {
+	builtinValue, ok := api.PolicySpec_Ai_BuiltinRegexRule_value[string(builtin)]
+	if !ok {
+		logger.Warn("unknown builtin regex rule", "builtin", builtin)
+		builtinValue = int32(api.PolicySpec_Ai_BUILTIN_UNSPECIFIED)
+	}
+	return &api.PolicySpec_Ai_RegexRule{
+		Kind: &api.PolicySpec_Ai_RegexRule_Builtin{
+			Builtin: api.PolicySpec_Ai_BuiltinRegexRule(builtinValue),
+		},
+	}
+}
+
+// createNamedRegexRule creates a regex rule for a named pattern
+func createNamedRegexRule(pattern, name string) *api.PolicySpec_Ai_RegexRule {
+	return &api.PolicySpec_Ai_RegexRule{
+		Kind: &api.PolicySpec_Ai_RegexRule_Regex{
+			Regex: &api.PolicySpec_Ai_NamedRegex{
+				Pattern: pattern,
+				Name:    name,
+			},
+		},
+	}
+}
+
+func createRegex(regex *v1alpha1.Regex, customResponse *v1alpha1.CustomResponse, logger *slog.Logger) *api.PolicySpec_Ai_RegexRules {
+	if regex == nil {
+		return nil
+	}
+
+	rules := &api.PolicySpec_Ai_RegexRules{}
+	if regex.Action != nil {
+		rules.Action = &api.PolicySpec_Ai_Action{}
+		if *regex.Action == v1alpha1.MASK {
+			rules.Action.Kind = api.PolicySpec_Ai_MASK
+		} else if *regex.Action == v1alpha1.REJECT {
+			rules.Action.Kind = api.PolicySpec_Ai_REJECT
+			rules.Action.RejectResponse = &api.PolicySpec_Ai_RequestRejection{}
+			if customResponse != nil {
+				if customResponse.Message != nil {
+					rules.Action.RejectResponse.Body = []byte(*customResponse.Message)
+				}
+				if customResponse.StatusCode != nil {
+					rules.Action.RejectResponse.Status = *customResponse.StatusCode
+				}
+			}
+		} else {
+			logger.Warn("unsupported regex action", "action", *regex.Action)
+			rules.Action.Kind = api.PolicySpec_Ai_ACTION_UNSPECIFIED
+		}
+	}
+
+	for _, match := range regex.Matches {
+		if match.Pattern != nil && match.Name != nil {
+			rules.Rules = append(rules.Rules, createNamedRegexRule(*match.Pattern, *match.Name))
+		}
+	}
+
+	for _, builtin := range regex.Builtins {
+		rules.Rules = append(rules.Rules, createBuiltinRegexRule(builtin, logger))
+	}
+
+	return rules
 }
