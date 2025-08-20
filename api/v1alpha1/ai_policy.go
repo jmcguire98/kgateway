@@ -23,6 +23,7 @@ type AIPolicy struct {
 	Defaults []FieldDefault `json:"defaults,omitempty"`
 
 	// The type of route to the LLM provider API. Currently, `CHAT` and `CHAT_STREAMING` are supported.
+	// Note: This field is not applicable when using agentgateway
 	// +kubebuilder:validation:Enum=CHAT;CHAT_STREAMING
 	// +kubebuilder:default=CHAT
 	RouteType *RouteType `json:"routeType,omitempty"`
