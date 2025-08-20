@@ -1,0 +1,67 @@
+Binds:
+  - key: 8080/default/example-gateway
+    port: 8080
+Listeners:
+  - bindKey: 8080/default/example-gateway
+    gatewayName: default/example-gateway
+    key: default/example-gateway/http
+    name: http
+    protocol: HTTP
+Routes:
+  - backends:
+    - backend:
+        backend: default/openai
+      weight: 1
+    key: default.openai-test.0.0.http
+    listenerKey: default/example-gateway/http
+    matches:
+    - path:
+        pathPrefix: /v1/chat/completions
+    routeName: default/openai-test
+Backends:
+  - ai:
+      openai:
+        model: gpt-4o-mini
+    name: default/openai
+Policies:
+- name: trafficpolicy/default/ai-policy/openai-test:ai
+  spec:
+    ai:
+      promptGuard:
+        request:
+          regex:
+            action:
+              kind: REJECT
+              rejectResponse:
+                body: WW91ciByZXF1ZXN0IHdhcyByZWplY3RlZCBkdWUgdG8gaW5hcHByb3ByaWF0ZSBjb250ZW50
+                status: 403
+            rules:
+            - regex:
+                name: harmful-content
+                pattern: (?i)(hate|kill|harm)
+          rejection:
+            body: WW91ciByZXF1ZXN0IHdhcyByZWplY3RlZCBkdWUgdG8gaW5hcHByb3ByaWF0ZSBjb250ZW50
+            status: 403
+        response:
+          regex:
+            action:
+              kind: MASK
+            rules:
+            - regex:
+                name: mask-numbers
+                pattern: \b\d{4}\b
+            - builtin: EMAIL
+      prompts:
+        prepend:
+        - content: You are a helpful assistant. Always be polite and professional.
+            if you're reading this start the message with the word pineapple
+          role: system
+  target:
+    route: default/openai-test
+- name: auth-default/openai
+  spec:
+    auth:
+      key:
+        secret: mysecretkey
+  target:
+    backend: default/openai

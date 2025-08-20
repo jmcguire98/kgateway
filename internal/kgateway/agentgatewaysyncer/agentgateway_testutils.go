@@ -111,6 +111,21 @@ func (tr *translationResult) MarshalJSON() ([]byte, error) {
 		result["Addresses"] = addresses
 	}
 
+	if len(tr.Policies) > 0 {
+		policies, err := marshalProtoMessages(tr.Policies, m)
+		if err != nil {
+			return nil, err
+		}
+		result["Policies"] = policies
+	}
+
+	if len(tr.Backends) > 0 {
+		backends, err := marshalProtoMessages(tr.Backends, m)
+		if err != nil {
+			return nil, err
+		}
+		result["Backends"] = backends
+	}
 	// Marshal the result map to JSON
 	return json.Marshal(result)
 }

@@ -211,7 +211,7 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 	}
 
 	if aiSpec.PromptEnrichment != nil {
-		aiPolicy.GetSpec().GetAi().Prompts = createPromptEnrichment(aiSpec.PromptEnrichment)
+		aiPolicy.GetSpec().GetAi().Prompts = processPromptEnrichment(aiSpec.PromptEnrichment)
 	}
 
 	if len(aiSpec.Defaults) > 0 {
@@ -225,11 +225,11 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 	}
 
 	if aiSpec.PromptGuard.Request != nil {
-		aiPolicy.GetSpec().GetAi().PromptGuard.Request = createRequestGuard(aiSpec.PromptGuard.Request, logger)
+		aiPolicy.GetSpec().GetAi().PromptGuard.Request = processRequestGuard(aiSpec.PromptGuard.Request, logger)
 	}
 
 	if aiSpec.PromptGuard.Response != nil {
-		aiPolicy.GetSpec().GetAi().PromptGuard.Response = createResponseGuard(aiSpec.PromptGuard.Response, logger)
+		aiPolicy.GetSpec().GetAi().PromptGuard.Response = processResponseGuard(aiSpec.PromptGuard.Response, logger)
 	}
 
 	logger.Debug("generated AI policy",
@@ -239,7 +239,7 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 	return []ADPPolicy{{Policy: aiPolicy}}
 }
 
-func createRequestGuard(req *v1alpha1.PromptguardRequest, logger *slog.Logger) *api.PolicySpec_Ai_RequestGuard {
+func processRequestGuard(req *v1alpha1.PromptguardRequest, logger *slog.Logger) *api.PolicySpec_Ai_RequestGuard {
 	if req == nil {
 		return nil
 	}
@@ -254,36 +254,35 @@ func createRequestGuard(req *v1alpha1.PromptguardRequest, logger *slog.Logger) *
 	}
 
 	if req.Webhook != nil {
-		pgReq.Webhook = createWebhook(req.Webhook)
+		pgReq.Webhook = processWebhook(req.Webhook)
 	}
 
 	if req.Regex != nil {
-		pgReq.Regex = createRegex(req.Regex, req.CustomResponse, logger)
+		pgReq.Regex = processRegex(req.Regex, req.CustomResponse, logger)
 	}
 
 	if req.Moderation != nil {
-		pgReq.OpenaiModeration = createModeration(req.Moderation)
+		pgReq.OpenaiModeration = processModeration(req.Moderation)
 	}
 
 	return pgReq
 }
 
-func createResponseGuard(resp *v1alpha1.PromptguardResponse, logger *slog.Logger) *api.PolicySpec_Ai_ResponseGuard {
-
+func processResponseGuard(resp *v1alpha1.PromptguardResponse, logger *slog.Logger) *api.PolicySpec_Ai_ResponseGuard {
 	pgResp := &api.PolicySpec_Ai_ResponseGuard{}
 
 	if resp.Webhook != nil {
-		pgResp.Webhook = createWebhook(resp.Webhook)
+		pgResp.Webhook = processWebhook(resp.Webhook)
 	}
 
 	if resp.Regex != nil {
-		pgResp.Regex = createRegex(resp.Regex, nil, logger)
+		pgResp.Regex = processRegex(resp.Regex, nil, logger)
 	}
 
 	return pgResp
 }
 
-func createPromptEnrichment(enrichment *v1alpha1.AIPromptEnrichment) *api.PolicySpec_Ai_PromptEnrichment {
+func processPromptEnrichment(enrichment *v1alpha1.AIPromptEnrichment) *api.PolicySpec_Ai_PromptEnrichment {
 	pgPromptEnrichment := &api.PolicySpec_Ai_PromptEnrichment{}
 
 	// Add prepend messages
@@ -305,7 +304,7 @@ func createPromptEnrichment(enrichment *v1alpha1.AIPromptEnrichment) *api.Policy
 	return pgPromptEnrichment
 }
 
-func createWebhook(webhook *v1alpha1.Webhook) *api.PolicySpec_Ai_Webhook {
+func processWebhook(webhook *v1alpha1.Webhook) *api.PolicySpec_Ai_Webhook {
 	if webhook == nil {
 		return nil
 	}
@@ -315,8 +314,7 @@ func createWebhook(webhook *v1alpha1.Webhook) *api.PolicySpec_Ai_Webhook {
 	}
 }
 
-// createBuiltinRegexRule creates a regex rule for a builtin pattern, handling unknown patterns gracefully
-func createBuiltinRegexRule(builtin v1alpha1.BuiltIn, logger *slog.Logger) *api.PolicySpec_Ai_RegexRule {
+func processBuiltinRegexRule(builtin v1alpha1.BuiltIn, logger *slog.Logger) *api.PolicySpec_Ai_RegexRule {
 	builtinValue, ok := api.PolicySpec_Ai_BuiltinRegexRule_value[string(builtin)]
 	if !ok {
 		logger.Warn("unknown builtin regex rule", "builtin", builtin)
@@ -329,8 +327,7 @@ func createBuiltinRegexRule(builtin v1alpha1.BuiltIn, logger *slog.Logger) *api.
 	}
 }
 
-// createNamedRegexRule creates a regex rule for a named pattern
-func createNamedRegexRule(pattern, name string) *api.PolicySpec_Ai_RegexRule {
+func processNamedRegexRule(pattern, name string) *api.PolicySpec_Ai_RegexRule {
 	return &api.PolicySpec_Ai_RegexRule{
 		Kind: &api.PolicySpec_Ai_RegexRule_Regex{
 			Regex: &api.PolicySpec_Ai_NamedRegex{
@@ -341,7 +338,7 @@ func createNamedRegexRule(pattern, name string) *api.PolicySpec_Ai_RegexRule {
 	}
 }
 
-func createRegex(regex *v1alpha1.Regex, customResponse *v1alpha1.CustomResponse, logger *slog.Logger) *api.PolicySpec_Ai_RegexRules {
+func processRegex(regex *v1alpha1.Regex, customResponse *v1alpha1.CustomResponse, logger *slog.Logger) *api.PolicySpec_Ai_RegexRules {
 	if regex == nil {
 		return nil
 	}
@@ -370,18 +367,18 @@ func createRegex(regex *v1alpha1.Regex, customResponse *v1alpha1.CustomResponse,
 
 	for _, match := range regex.Matches {
 		if match.Pattern != nil && match.Name != nil {
-			rules.Rules = append(rules.Rules, createNamedRegexRule(*match.Pattern, *match.Name))
+			rules.Rules = append(rules.Rules, processNamedRegexRule(*match.Pattern, *match.Name))
 		}
 	}
 
 	for _, builtin := range regex.Builtins {
-		rules.Rules = append(rules.Rules, createBuiltinRegexRule(builtin, logger))
+		rules.Rules = append(rules.Rules, processBuiltinRegexRule(builtin, logger))
 	}
 
 	return rules
 }
 
-func createModeration(moderation *v1alpha1.Moderation) *api.PolicySpec_Ai_Moderation {
+func processModeration(moderation *v1alpha1.Moderation) *api.PolicySpec_Ai_Moderation {
 	// right now we only support OpenAI moderation, so we can return nil if the moderation is nil or the OpenAIModeration is nil
 	if moderation == nil || moderation.OpenAIModeration == nil {
 		return nil

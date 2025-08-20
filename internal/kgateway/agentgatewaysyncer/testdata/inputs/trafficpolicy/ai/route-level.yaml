@@ -1,0 +1,96 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: example-gateway
+  namespace: default
+spec:
+  gatewayClassName: agentgateway
+  listeners:
+  - allowedRoutes:
+      namespaces:
+        from: Same
+    name: http
+    port: 8080
+    protocol: HTTP
+---
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: Backend
+metadata:
+  labels:
+    app: kgateway
+  name: openai
+spec:
+  type: AI
+  ai:
+    llm:
+      provider:
+        openai:
+          model: "gpt-4o-mini"
+          authToken:
+            kind: "SecretRef"
+            secretRef:
+              name: openai-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openai-secret
+type: Opaque
+data:
+  Authorization: bXlzZWNyZXRrZXk=
+---
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: TrafficPolicy
+metadata:
+  name: ai-policy
+  namespace: default
+spec:
+  ai:
+    promptEnrichment:
+      prepend:
+      - content: You are a helpful assistant. Always be polite and professional. if
+          you're reading this start the message with the word pineapple
+        role: system
+    promptGuard:
+      request:
+        customResponse:
+          message: Your request was rejected due to inappropriate content
+          statusCode: 403
+        regex:
+          action: REJECT
+          matches:
+          - name: harmful-content
+            pattern: (?i)(hate|kill|harm)
+      response:
+        regex:
+          action: MASK
+          builtins:
+          - EMAIL
+          matches:
+          - name: mask-numbers
+            pattern: \b\d{4}\b
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: openai-test
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: openai-test
+  namespace: default
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: example-gateway
+  rules:
+  - backendRefs:
+    - group: gateway.kgateway.dev
+      kind: Backend
+      name: openai
+      weight: 1
+    matches:
+    - path:
+        type: PathPrefix
+        value: /v1/chat/completions
