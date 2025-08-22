@@ -209,8 +209,14 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 	if len(aiSpec.Defaults) > 0 {
 		for _, def := range aiSpec.Defaults {
 			if def.Override != nil && *def.Override {
+				if aiPolicy.GetSpec().GetAi().Overrides == nil {
+					aiPolicy.GetSpec().GetAi().Overrides = make(map[string]string)
+				}
 				aiPolicy.GetSpec().GetAi().Overrides[def.Field] = def.Value
 			} else {
+				if aiPolicy.GetSpec().GetAi().Defaults == nil {
+					aiPolicy.GetSpec().GetAi().Defaults = make(map[string]string)
+				}
 				aiPolicy.GetSpec().GetAi().Defaults[def.Field] = def.Value
 			}
 		}
