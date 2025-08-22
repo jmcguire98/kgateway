@@ -191,7 +191,7 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 	logger := logging.New("agentgateway/plugins/traffic")
 
 	aiSpec := trafficPolicy.Spec.AI
-	if aiSpec.PromptGuard == nil {
+	if aiSpec.Defaults == nil && aiSpec.PromptGuard == nil && aiSpec.PromptEnrichment == nil {
 		return nil
 	}
 
@@ -200,12 +200,7 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 		Target: policyTarget,
 		Spec: &api.PolicySpec{
 			Kind: &api.PolicySpec_Ai_{
-				Ai: &api.PolicySpec_Ai{
-					PromptGuard: &api.PolicySpec_Ai_PromptGuard{},
-					Prompts:     &api.PolicySpec_Ai_PromptEnrichment{},
-					Defaults:    make(map[string]string),
-					Overrides:   make(map[string]string),
-				},
+				Ai: &api.PolicySpec_Ai{},
 			},
 		},
 	}
