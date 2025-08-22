@@ -191,9 +191,6 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 	logger := logging.New("agentgateway/plugins/traffic")
 
 	aiSpec := trafficPolicy.Spec.AI
-	if aiSpec.Defaults == nil && aiSpec.PromptGuard == nil && aiSpec.PromptEnrichment == nil {
-		return nil
-	}
 
 	aiPolicy := &api.Policy{
 		Name:   policyName + aiPolicySuffix,
@@ -219,12 +216,14 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 		}
 	}
 
-	if aiSpec.PromptGuard.Request != nil {
-		aiPolicy.GetSpec().GetAi().PromptGuard.Request = processRequestGuard(aiSpec.PromptGuard.Request, logger)
-	}
+	if aiSpec.PromptGuard != nil {
+		if aiSpec.PromptGuard.Request != nil {
+			aiPolicy.GetSpec().GetAi().PromptGuard.Request = processRequestGuard(aiSpec.PromptGuard.Request, logger)
+		}
 
-	if aiSpec.PromptGuard.Response != nil {
-		aiPolicy.GetSpec().GetAi().PromptGuard.Response = processResponseGuard(aiSpec.PromptGuard.Response, logger)
+		if aiSpec.PromptGuard.Response != nil {
+			aiPolicy.GetSpec().GetAi().PromptGuard.Response = processResponseGuard(aiSpec.PromptGuard.Response, logger)
+		}
 	}
 
 	logger.Debug("generated AI policy",
