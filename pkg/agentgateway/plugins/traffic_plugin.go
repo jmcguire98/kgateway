@@ -369,9 +369,22 @@ func processRegex(regex *v1alpha1.Regex, customResponse *v1alpha1.CustomResponse
 	}
 
 	for _, match := range regex.Matches {
-		if match.Pattern != nil && match.Name != nil {
-			rules.Rules = append(rules.Rules, processNamedRegexRule(*match.Pattern, *match.Name))
+		// TODO(jmcguire98): should we really allow empty patterns on regex matches?
+		// I see the CRD is omitempty, but I don't get why
+		// for now i'm just dropping them on the floor
+		if match.Pattern == nil {
+			continue
 		}
+
+		// we should probably not pass an empty name to the dataplane even if none was provided,
+		// since the name is what will be used for masking
+		// if the action is mask
+		name := ""
+		if match.Name != nil {
+			name = *match.Name
+		}
+
+		rules.Rules = append(rules.Rules, processNamedRegexRule(*match.Pattern, name))
 	}
 
 	for _, builtin := range regex.Builtins {
