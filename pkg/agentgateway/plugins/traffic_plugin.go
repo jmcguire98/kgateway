@@ -223,6 +223,9 @@ func processAIPolicy(ctx krt.HandlerContext, trafficPolicy *v1alpha1.TrafficPoli
 	}
 
 	if aiSpec.PromptGuard != nil {
+		if aiPolicy.GetSpec().GetAi().PromptGuard == nil {
+			aiPolicy.GetSpec().GetAi().PromptGuard = &api.PolicySpec_Ai_PromptGuard{}
+		}
 		if aiSpec.PromptGuard.Request != nil {
 			aiPolicy.GetSpec().GetAi().PromptGuard.Request = processRequestGuard(aiSpec.PromptGuard.Request, logger)
 		}
