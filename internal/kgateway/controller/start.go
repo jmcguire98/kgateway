@@ -19,7 +19,6 @@ import (
 	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer"
-	agwbuiltin "github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/plugins/builtin"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugins/inferenceextension/endpointpicker"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/registry"
@@ -251,9 +250,6 @@ func pluginFactoryWithBuiltin(cfg StartConfig) extensions2.K8sGatewayExtensionsF
 	return func(ctx context.Context, commoncol *common.CommonCollections) sdk.Plugin {
 		plugins := registry.Plugins(ctx, commoncol, cfg.WaypointGatewayClassName)
 		plugins = append(plugins, krtcollections.NewBuiltinPlugin(ctx))
-		if cfg.SetupOpts.GlobalSettings.EnableAgentGateway {
-			plugins = append(plugins, agwbuiltin.NewBuiltinPlugin())
-		}
 		if cfg.ExtraPlugins != nil {
 			plugins = append(plugins, cfg.ExtraPlugins(ctx, commoncol)...)
 		}
