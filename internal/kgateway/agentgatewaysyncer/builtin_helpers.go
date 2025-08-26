@@ -9,8 +9,6 @@ import (
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// applyTimeouts copies Gateway API timeout settings from the rule onto the output agentgateway Route.
-// It does not override fields that are already populated by higher-priority logic.
 func applyTimeouts(rule *gwv1.HTTPRouteRule, route *api.Route) error {
 	if rule == nil || rule.Timeouts == nil {
 		return nil
@@ -35,7 +33,6 @@ func applyTimeouts(rule *gwv1.HTTPRouteRule, route *api.Route) error {
 	return nil
 }
 
-// applyRetries copies Gateway API retry settings onto the agentgateway Route.
 func applyRetries(rule *gwv1.HTTPRouteRule, route *api.Route) error {
 	if rule == nil || rule.Retry == nil {
 		return nil
