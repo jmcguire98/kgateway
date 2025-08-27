@@ -72,8 +72,8 @@ func convertHTTPRouteToADP(ctx RouteContext, r gwv1.HTTPRouteRule, obj *gwv1.HTT
 
 	filters, filterError := buildADPFilters(ctx, obj.Namespace, r.Filters)
 	res.Filters = filters
-  
-  if err := applyTimeouts(&r, res); err != nil {
+
+	if err := applyTimeouts(&r, res); err != nil {
 		return nil, &reporter.RouteCondition{
 			Type:    gwv1.RouteConditionAccepted,
 			Status:  metav1.ConditionFalse,
