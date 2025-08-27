@@ -105,7 +105,6 @@ func NewControllerBuilder(ctx context.Context, cfg StartConfig) (*ControllerBuil
 		setupLog.Info("starting log in dev mode")
 		loggingOptions.SetDefaultOutputLevel(istiolog.OverrideScopeName, istiolog.DebugLevel)
 		logging.MustSetLevel(ControllerRuntimeLogger, slog.LevelDebug)
-		loggingOptions.JSONEncoding = false
 	}
 	istiolog.Configure(loggingOptions)
 
