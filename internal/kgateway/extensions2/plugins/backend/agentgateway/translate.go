@@ -116,7 +116,7 @@ func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcoll
 	}
 
 	if llm.PathOverride != nil {
-		logger.Warn("path override is not supported for agentgateway")
+		logger.Warn("path override is not supported for agentgateway, use a URL rewrite and custom host instead")
 	}
 
 	if llm.AuthHeaderOverride != nil {
