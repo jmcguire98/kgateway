@@ -66,13 +66,13 @@ func TranslateTrafficPolicy(
 		case wellknown.GatewayKind:
 			policyTarget = &api.PolicyTarget{
 				Kind: &api.PolicyTarget_Gateway{
-					Gateway: utils.InternalGatewayName(trafficPolicy.Namespace, string(target.Name), ""),
+					Gateway: utils.InternalGatewayName(trafficPolicy.GetNamespace(), string(target.Name), ""),
 				},
 			}
 			if target.SectionName != nil {
 				policyTarget = &api.PolicyTarget{
 					Kind: &api.PolicyTarget_Listener{
-						Listener: utils.InternalGatewayName(trafficPolicy.Namespace, string(target.Name), string(*target.SectionName)),
+						Listener: utils.InternalGatewayName(trafficPolicy.GetNamespace(), string(target.Name), string(*target.SectionName)),
 					},
 				}
 			}
@@ -80,13 +80,13 @@ func TranslateTrafficPolicy(
 		case wellknown.HTTPRouteKind:
 			policyTarget = &api.PolicyTarget{
 				Kind: &api.PolicyTarget_Route{
-					Route: utils.InternalRouteRuleName(trafficPolicy.Namespace, string(target.Name), ""),
+					Route: utils.InternalRouteRuleName(trafficPolicy.GetNamespace(), string(target.Name), ""),
 				},
 			}
 			if target.SectionName != nil {
 				policyTarget = &api.PolicyTarget{
 					Kind: &api.PolicyTarget_RouteRule{
-						RouteRule: utils.InternalRouteRuleName(trafficPolicy.Namespace, string(target.Name), string(*target.SectionName)),
+						RouteRule: utils.InternalRouteRuleName(trafficPolicy.GetNamespace(), string(target.Name), string(*target.SectionName)),
 					},
 				}
 			}
@@ -95,7 +95,7 @@ func TranslateTrafficPolicy(
 			// kgateway backend kind (MCP, AI, etc.)
 
 			// Look up the Backend referenced by the policy
-			backendKey := getBackendKey(trafficPolicy.Namespace, string(target.Name))
+			backendKey := getBackendKey(trafficPolicy.GetNamespace(), string(target.Name))
 			backend := krt.FetchOne(ctx, backends, krt.FilterKey(backendKey))
 			if backend == nil {
 				logger.Error("backend not found",
@@ -108,7 +108,7 @@ func TranslateTrafficPolicy(
 				isMcpTarget = true
 				policyTarget = &api.PolicyTarget{
 					Kind: &api.PolicyTarget_Backend{
-						Backend: trafficPolicy.Namespace + "/" + string(target.Name),
+						Backend: trafficPolicy.GetNamespace() + "/" + string(target.Name),
 					},
 				}
 			} else {
@@ -144,7 +144,7 @@ func translateTrafficPolicyToADP(
 	adpPolicies := make([]ADPPolicy, 0)
 
 	// Generate a base policy name from the TrafficPolicy reference
-	policyName := getTrafficPolicyName(trafficPolicy.Namespace, trafficPolicy.Name, policyTargetName)
+	policyName := getTrafficPolicyName(trafficPolicy.GetNamespace(), trafficPolicy.GetName(), policyTargetName)
 
 	// Convert ExtAuth policy if present
 	if trafficPolicy.Spec.ExtAuth != nil && trafficPolicy.Spec.ExtAuth.ExtensionRef != nil {
