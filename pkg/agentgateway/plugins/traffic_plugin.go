@@ -124,6 +124,7 @@ func TranslateTrafficPolicy(
 		}
 
 		if policyTarget != nil {
+			logger.Info("translating traffic policy", "policy", trafficPolicy.Name, "ns", trafficPolicy.Namespace, "target", policyTarget)
 			translatedPolicies := translateTrafficPolicyToADP(ctx, gatewayExtensions, trafficPolicy, string(target.Name), policyTarget, isMcpTarget)
 			adpPolicies = append(adpPolicies, translatedPolicies...)
 		}
