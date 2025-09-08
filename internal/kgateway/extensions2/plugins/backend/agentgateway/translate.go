@@ -91,20 +91,23 @@ func buildStaticIr(be *v1alpha1.Backend) (*StaticIr, error) {
 }
 
 // buildAIIr pre-resolves AI backend configuration including secrets
-// translateLLMProvider translates a single LLM provider configuration to AIBackend and auth policy
-func translateLLMProvider(krtctx krt.HandlerContext, llm *v1alpha1.LLMProvider, secrets *krtcollections.SecretIndex, namespace string) (*api.AIBackend, *api.BackendAuthPolicy, error) {
-	aiBackend := &api.AIBackend{}
+
+// translateLLMProviderToProvider translates a single LLM provider configuration to AIBackend_Provider and auth policy
+func translateLLMProviderToProvider(krtctx krt.HandlerContext, llm *v1alpha1.LLMProvider, providerName string, secrets *krtcollections.SecretIndex, namespace string) (*api.AIBackend_Provider, *api.BackendAuthPolicy, error) {
+	provider := &api.AIBackend_Provider{
+		Name: providerName,
+	}
 	var auth *api.BackendAuthPolicy
 
 	if llm.HostOverride != nil {
-		aiBackend.Override = &api.AIBackend_Override{
+		provider.Override = &api.AIBackend_Override{
 			Host: llm.HostOverride.Host,
 			Port: int32(llm.HostOverride.Port),
 		}
 	}
 
-	if llm.PathOverride != nil {
-		logger.Warn("path override is not supported for agentgateway, use a URL rewrite and custom host instead")
+	if llm.PathOverride != nil && llm.PathOverride.FullPath != nil {
+		provider.PathOverride = &wrappers.StringValue{Value: *llm.PathOverride.FullPath}
 	}
 
 	if llm.AuthHeaderOverride != nil {
@@ -117,12 +120,12 @@ func translateLLMProvider(krtctx krt.HandlerContext, llm *v1alpha1.LLMProvider, 
 		if llm.Provider.OpenAI.Model != nil {
 			openai.Model = &wrappers.StringValue{Value: *llm.Provider.OpenAI.Model}
 		}
-		aiBackend.Provider = &api.AIBackend_Openai{
+		provider.Provider = &api.AIBackend_Provider_Openai{
 			Openai: openai,
 		}
 		auth = buildTranslatedAuthPolicy(krtctx, &llm.Provider.OpenAI.AuthToken, secrets, namespace)
 	} else if llm.Provider.AzureOpenAI != nil {
-		aiBackend.Provider = &api.AIBackend_Openai{
+		provider.Provider = &api.AIBackend_Provider_Openai{
 			Openai: &api.AIBackend_OpenAI{},
 		}
 		auth = buildTranslatedAuthPolicy(krtctx, &llm.Provider.AzureOpenAI.AuthToken, secrets, namespace)
@@ -131,19 +134,19 @@ func translateLLMProvider(krtctx krt.HandlerContext, llm *v1alpha1.LLMProvider, 
 		if llm.Provider.Anthropic.Model != nil {
 			anthropic.Model = &wrappers.StringValue{Value: *llm.Provider.Anthropic.Model}
 		}
-		aiBackend.Provider = &api.AIBackend_Anthropic_{
+		provider.Provider = &api.AIBackend_Provider_Anthropic{
 			Anthropic: anthropic,
 		}
 		auth = buildTranslatedAuthPolicy(krtctx, &llm.Provider.Anthropic.AuthToken, secrets, namespace)
 	} else if llm.Provider.Gemini != nil {
-		aiBackend.Provider = &api.AIBackend_Gemini_{
+		provider.Provider = &api.AIBackend_Provider_Gemini{
 			Gemini: &api.AIBackend_Gemini{
 				Model: &wrappers.StringValue{Value: llm.Provider.Gemini.Model},
 			},
 		}
 		auth = buildTranslatedAuthPolicy(krtctx, &llm.Provider.Gemini.AuthToken, secrets, namespace)
 	} else if llm.Provider.VertexAI != nil {
-		aiBackend.Provider = &api.AIBackend_Vertex_{
+		provider.Provider = &api.AIBackend_Provider_Vertex{
 			Vertex: &api.AIBackend_Vertex{
 				Model:     &wrappers.StringValue{Value: llm.Provider.VertexAI.Model},
 				Region:    llm.Provider.VertexAI.Location,
@@ -166,7 +169,7 @@ func translateLLMProvider(krtctx krt.HandlerContext, llm *v1alpha1.LLMProvider, 
 			}
 		}
 
-		aiBackend.Provider = &api.AIBackend_Bedrock_{
+		provider.Provider = &api.AIBackend_Provider_Bedrock{
 			Bedrock: &api.AIBackend_Bedrock{
 				Model:               model,
 				Region:              region,
@@ -183,7 +186,7 @@ func translateLLMProvider(krtctx krt.HandlerContext, llm *v1alpha1.LLMProvider, 
 		return nil, nil, fmt.Errorf("no supported LLM provider configured")
 	}
 
-	return aiBackend, auth, nil
+	return provider, auth, nil
 }
 
 func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcollections.SecretIndex) (*AIIr, error) {
@@ -191,41 +194,88 @@ func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcoll
 		return nil, fmt.Errorf("ai backend spec must not be nil for AI backend type")
 	}
 
-	var backends []AIBackendWithAuth
+	backendName := be.Namespace + "/" + be.Name
+	aiBackend := &api.AIBackend{
+		Providers: []*api.AIBackend_Provider{},
+	}
+	var policies []*api.Policy
+	providerIndex := 0
 
 	if be.Spec.AI.MultiPool != nil {
 		for _, priority := range be.Spec.AI.MultiPool.Priorities {
-			for _, provider := range priority.Pool {
-				aiBackend, authPolicy, err := translateLLMProvider(krtctx, &provider, secrets, be.Namespace)
+			for _, llmProvider := range priority.Pool {
+				providerName := fmt.Sprintf("%s_%d", be.Name, providerIndex)
+
+				provider, authPolicy, err := translateLLMProviderToProvider(krtctx, &llmProvider, providerName, secrets, be.Namespace)
 				if err != nil {
 					return nil, fmt.Errorf("failed to translate provider in multipool: %w", err)
 				}
-				backends = append(backends, AIBackendWithAuth{
-					Backend:    aiBackend,
-					AuthPolicy: authPolicy,
-				})
+				aiBackend.Providers = append(aiBackend.Providers, provider)
+
+				if authPolicy != nil {
+					subBackendTarget := fmt.Sprintf("%s/%s", backendName, providerName)
+					policy := &api.Policy{
+						Name: fmt.Sprintf("auth-%s-%s", backendName, providerName),
+						Target: &api.PolicyTarget{
+							Kind: &api.PolicyTarget_SubBackend{
+								SubBackend: subBackendTarget,
+							},
+						},
+						Spec: &api.PolicySpec{
+							Kind: &api.PolicySpec_Auth{
+								Auth: authPolicy,
+							},
+						},
+					}
+					policies = append(policies, policy)
+				}
+				providerIndex++
 			}
 		}
 	} else if be.Spec.AI.LLM != nil {
-		aiBackend, authPolicy, err := translateLLMProvider(krtctx, be.Spec.AI.LLM, secrets, be.Namespace)
+		providerName := fmt.Sprintf("%s_%d", be.Name, providerIndex)
+		provider, authPolicy, err := translateLLMProviderToProvider(krtctx, be.Spec.AI.LLM, providerName, secrets, be.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to translate LLM provider: %w", err)
 		}
-		backends = append(backends, AIBackendWithAuth{
-			Backend:    aiBackend,
-			AuthPolicy: authPolicy,
-		})
+		aiBackend.Providers = append(aiBackend.Providers, provider)
+
+		if authPolicy != nil {
+			subBackendTarget := fmt.Sprintf("%s/%s", backendName, providerName)
+			policy := &api.Policy{
+				Name: fmt.Sprintf("auth-%s-%s", backendName, providerName),
+				Target: &api.PolicyTarget{
+					Kind: &api.PolicyTarget_SubBackend{
+						SubBackend: subBackendTarget,
+					},
+				},
+				Spec: &api.PolicySpec{
+					Kind: &api.PolicySpec_Auth{
+						Auth: authPolicy,
+					},
+				},
+			}
+			policies = append(policies, policy)
+		}
 	} else {
 		return nil, fmt.Errorf("AI backend has no valid LLM or MultiPool configuration")
 	}
 
-	if len(backends) == 0 {
-		return nil, fmt.Errorf("no valid AI backends were translated")
+	if len(aiBackend.Providers) == 0 {
+		return nil, fmt.Errorf("no valid AI providers were translated")
+	}
+
+	// Create the Backend wrapper
+	backend := &api.Backend{
+		Name: backendName,
+		Kind: &api.Backend_Ai{
+			Ai: aiBackend,
+		},
 	}
 
 	return &AIIr{
-		Name:     be.Namespace + "/" + be.Name,
-		Backends: backends,
+		Backend:  backend,
+		Policies: policies,
 	}, nil
 }
 
