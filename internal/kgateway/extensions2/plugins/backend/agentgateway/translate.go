@@ -189,6 +189,28 @@ func translateLLMProviderToProvider(krtctx krt.HandlerContext, llm *v1alpha1.LLM
 	return provider, auth, nil
 }
 
+// createAuthPolicy creates an auth policy for a sub-backend target
+func createAuthPolicy(authPolicy *api.BackendAuthPolicy, backendName, providerName string) *api.Policy {
+	if authPolicy == nil {
+		return nil
+	}
+
+	subBackendTarget := fmt.Sprintf("%s/%s", backendName, providerName)
+	return &api.Policy{
+		Name: fmt.Sprintf("auth-%s-%s", backendName, providerName),
+		Target: &api.PolicyTarget{
+			Kind: &api.PolicyTarget_SubBackend{
+				SubBackend: subBackendTarget,
+			},
+		},
+		Spec: &api.PolicySpec{
+			Kind: &api.PolicySpec_Auth{
+				Auth: authPolicy,
+			},
+		},
+	}
+}
+
 func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcollections.SecretIndex) (*AIIr, error) {
 	if be.Spec.AI == nil {
 		return nil, fmt.Errorf("ai backend spec must not be nil for AI backend type")
@@ -199,10 +221,9 @@ func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcoll
 		Providers: []*api.AIBackend_Provider{},
 	}
 	var policies []*api.Policy
-	providerIndex := 0
 
 	if be.Spec.AI.MultiPool != nil {
-		for _, priority := range be.Spec.AI.MultiPool.Priorities {
+		for providerIndex, priority := range be.Spec.AI.MultiPool.Priorities {
 			for _, llmProvider := range priority.Pool {
 				providerName := fmt.Sprintf("%s_%d", be.Name, providerIndex)
 
@@ -212,49 +233,21 @@ func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcoll
 				}
 				aiBackend.Providers = append(aiBackend.Providers, provider)
 
-				if authPolicy != nil {
-					subBackendTarget := fmt.Sprintf("%s/%s", backendName, providerName)
-					policy := &api.Policy{
-						Name: fmt.Sprintf("auth-%s-%s", backendName, providerName),
-						Target: &api.PolicyTarget{
-							Kind: &api.PolicyTarget_SubBackend{
-								SubBackend: subBackendTarget,
-							},
-						},
-						Spec: &api.PolicySpec{
-							Kind: &api.PolicySpec_Auth{
-								Auth: authPolicy,
-							},
-						},
-					}
+				if policy := createAuthPolicy(authPolicy, backendName, providerName); policy != nil {
 					policies = append(policies, policy)
 				}
-				providerIndex++
 			}
 		}
 	} else if be.Spec.AI.LLM != nil {
-		providerName := fmt.Sprintf("%s_%d", be.Name, providerIndex)
+		// in a single provider case, the index is always 0
+		providerName := fmt.Sprintf("%s_%d", be.Name, 0)
 		provider, authPolicy, err := translateLLMProviderToProvider(krtctx, be.Spec.AI.LLM, providerName, secrets, be.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to translate LLM provider: %w", err)
 		}
 		aiBackend.Providers = append(aiBackend.Providers, provider)
 
-		if authPolicy != nil {
-			subBackendTarget := fmt.Sprintf("%s/%s", backendName, providerName)
-			policy := &api.Policy{
-				Name: fmt.Sprintf("auth-%s-%s", backendName, providerName),
-				Target: &api.PolicyTarget{
-					Kind: &api.PolicyTarget_SubBackend{
-						SubBackend: subBackendTarget,
-					},
-				},
-				Spec: &api.PolicySpec{
-					Kind: &api.PolicySpec_Auth{
-						Auth: authPolicy,
-					},
-				},
-			}
+		if policy := createAuthPolicy(authPolicy, backendName, providerName); policy != nil {
 			policies = append(policies, policy)
 		}
 	} else {
