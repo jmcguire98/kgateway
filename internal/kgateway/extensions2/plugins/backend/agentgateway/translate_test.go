@@ -297,13 +297,14 @@ func TestBuildAIBackendIr(t *testing.T) {
 			validate: func(aiIr *AIIr) bool {
 				return aiIr != nil &&
 					aiIr.Name == "test-ns/openai-backend" &&
-					aiIr.Backend != nil &&
-					aiIr.Backend.GetOpenai() != nil &&
-					aiIr.Backend.GetOpenai().Model != nil &&
-					aiIr.Backend.GetOpenai().Model.Value == "gpt-4" &&
-					aiIr.AuthPolicy != nil &&
-					aiIr.AuthPolicy.GetKey() != nil &&
-					aiIr.AuthPolicy.GetKey().Secret == "sk-test-token"
+					len(aiIr.Backends) == 1 &&
+					aiIr.Backends[0].Backend != nil &&
+					aiIr.Backends[0].Backend.GetOpenai() != nil &&
+					aiIr.Backends[0].Backend.GetOpenai().Model != nil &&
+					aiIr.Backends[0].Backend.GetOpenai().Model.Value == "gpt-4" &&
+					aiIr.Backends[0].AuthPolicy != nil &&
+					aiIr.Backends[0].AuthPolicy.GetKey() != nil &&
+					aiIr.Backends[0].AuthPolicy.GetKey().Secret == "sk-test-token"
 			},
 		},
 		{
@@ -335,13 +336,14 @@ func TestBuildAIBackendIr(t *testing.T) {
 			validate: func(aiIr *AIIr) bool {
 				return aiIr != nil &&
 					aiIr.Name == "test-ns/anthropic-backend" &&
-					aiIr.Backend != nil &&
-					aiIr.Backend.GetAnthropic() != nil &&
-					aiIr.Backend.GetAnthropic().Model != nil &&
-					aiIr.Backend.GetAnthropic().Model.Value == "claude-3-sonnet" &&
-					aiIr.AuthPolicy != nil &&
-					aiIr.AuthPolicy.GetKey() != nil &&
-					aiIr.AuthPolicy.GetKey().Secret == "test-api-key"
+					len(aiIr.Backends) == 1 &&
+					aiIr.Backends[0].Backend != nil &&
+					aiIr.Backends[0].Backend.GetAnthropic() != nil &&
+					aiIr.Backends[0].Backend.GetAnthropic().Model != nil &&
+					aiIr.Backends[0].Backend.GetAnthropic().Model.Value == "claude-3-sonnet" &&
+					aiIr.Backends[0].AuthPolicy != nil &&
+					aiIr.Backends[0].AuthPolicy.GetKey() != nil &&
+					aiIr.Backends[0].AuthPolicy.GetKey().Secret == "test-api-key"
 			},
 		},
 		{
@@ -373,13 +375,14 @@ func TestBuildAIBackendIr(t *testing.T) {
 			validate: func(aiIr *AIIr) bool {
 				return aiIr != nil &&
 					aiIr.Name == "test-ns/gemini-backend" &&
-					aiIr.Backend != nil &&
-					aiIr.Backend.GetGemini() != nil &&
-					aiIr.Backend.GetGemini().Model != nil &&
-					aiIr.Backend.GetGemini().Model.Value == "gemini-pro" &&
-					aiIr.AuthPolicy != nil &&
-					aiIr.AuthPolicy.GetKey() != nil &&
-					aiIr.AuthPolicy.GetKey().Secret == "gemini-api-key"
+					len(aiIr.Backends) == 1 &&
+					aiIr.Backends[0].Backend != nil &&
+					aiIr.Backends[0].Backend.GetGemini() != nil &&
+					aiIr.Backends[0].Backend.GetGemini().Model != nil &&
+					aiIr.Backends[0].Backend.GetGemini().Model.Value == "gemini-pro" &&
+					aiIr.Backends[0].AuthPolicy != nil &&
+					aiIr.Backends[0].AuthPolicy.GetKey() != nil &&
+					aiIr.Backends[0].AuthPolicy.GetKey().Secret == "gemini-api-key"
 			},
 		},
 		{
@@ -408,15 +411,18 @@ func TestBuildAIBackendIr(t *testing.T) {
 			secrets:     nil,
 			expectError: false,
 			validate: func(aiIr *AIIr) bool {
-				print(aiIr.AuthPolicy.GetPassthrough().String())
+				if aiIr != nil && len(aiIr.Backends) > 0 && aiIr.Backends[0].AuthPolicy != nil {
+					print(aiIr.Backends[0].AuthPolicy.GetPassthrough().String())
+				}
 				return aiIr != nil &&
 					aiIr.Name == "test-ns/vertex-backend" &&
-					aiIr.Backend != nil &&
-					aiIr.Backend.GetVertex() != nil &&
-					aiIr.Backend.GetVertex().Model != nil &&
-					aiIr.Backend.GetVertex().Model.Value == "gemini-pro" &&
-					aiIr.AuthPolicy != nil &&
-					aiIr.AuthPolicy.GetPassthrough() != nil
+					len(aiIr.Backends) == 1 &&
+					aiIr.Backends[0].Backend != nil &&
+					aiIr.Backends[0].Backend.GetVertex() != nil &&
+					aiIr.Backends[0].Backend.GetVertex().Model != nil &&
+					aiIr.Backends[0].Backend.GetVertex().Model.Value == "gemini-pro" &&
+					aiIr.Backends[0].AuthPolicy != nil &&
+					aiIr.Backends[0].AuthPolicy.GetPassthrough() != nil
 			},
 		},
 		{
@@ -457,10 +463,12 @@ func TestBuildAIBackendIr(t *testing.T) {
 			}),
 			expectError: false,
 			validate: func(aiIr *AIIr) bool {
-				bedrock := aiIr.Backend.GetBedrock()
-				aws := aiIr.AuthPolicy.GetAws().GetExplicitConfig()
-				return aiIr != nil &&
-					aiIr.Name == "test-ns/bedrock-backend-custom" &&
+				if aiIr == nil || len(aiIr.Backends) != 1 {
+					return false
+				}
+				bedrock := aiIr.Backends[0].Backend.GetBedrock()
+				aws := aiIr.Backends[0].AuthPolicy.GetAws().GetExplicitConfig()
+				return aiIr.Name == "test-ns/bedrock-backend-custom" &&
 					bedrock != nil &&
 					bedrock.Model.Value == "anthropic.claude-3-haiku-20240307-v1:0" &&
 					bedrock.Region == "eu-west-1" &&
@@ -509,12 +517,13 @@ func TestBuildAIBackendIr(t *testing.T) {
 			validate: func(aiIr *AIIr) bool {
 				return aiIr != nil &&
 					aiIr.Name == "test-ns/openai-secret-backend" &&
-					aiIr.Backend.GetOpenai().Model.Value == "gpt-3.5-turbo" &&
-					aiIr.AuthPolicy.GetKey().Secret == "sk-secret-token" // Bearer prefix should be stripped
+					len(aiIr.Backends) == 1 &&
+					aiIr.Backends[0].Backend.GetOpenai().Model.Value == "gpt-3.5-turbo" &&
+					aiIr.Backends[0].AuthPolicy.GetKey().Secret == "sk-secret-token" // Bearer prefix should be stripped
 			},
 		},
 		{
-			name: "MultiPool backend - uses first priority",
+			name: "MultiPool backend - translates all providers for failover",
 			backend: &v1alpha1.Backend{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "multipool-backend",
@@ -559,11 +568,26 @@ func TestBuildAIBackendIr(t *testing.T) {
 			secrets:     nil,
 			expectError: false,
 			validate: func(aiIr *AIIr) bool {
-				return aiIr != nil &&
-					aiIr.Name == "test-ns/multipool-backend" &&
-					aiIr.Backend.GetOpenai() != nil &&
-					aiIr.Backend.GetOpenai().Model.Value == "gpt-4" &&
-					aiIr.AuthPolicy.GetKey().Secret == "first-token"
+				if aiIr == nil || aiIr.Name != "test-ns/multipool-backend" {
+					return false
+				}
+				// Should have both providers translated
+				if len(aiIr.Backends) != 2 {
+					return false
+				}
+				// Check first provider (OpenAI)
+				if aiIr.Backends[0].Backend.GetOpenai() == nil ||
+					aiIr.Backends[0].Backend.GetOpenai().Model.Value != "gpt-4" ||
+					aiIr.Backends[0].AuthPolicy.GetKey().Secret != "first-token" {
+					return false
+				}
+				// Check second provider (Anthropic)
+				if aiIr.Backends[1].Backend.GetAnthropic() == nil ||
+					aiIr.Backends[1].Backend.GetAnthropic().Model.Value != "claude-3" ||
+					aiIr.Backends[1].AuthPolicy.GetKey().Secret != "second-token" {
+					return false
+				}
+				return true
 			},
 		},
 		{

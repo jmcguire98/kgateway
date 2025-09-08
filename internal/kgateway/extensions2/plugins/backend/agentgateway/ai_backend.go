@@ -15,20 +15,36 @@ func ProcessAIBackendForAgentGateway(be *AgentGatewayBackendIr) ([]*api.Backend,
 		return nil, nil, fmt.Errorf("ai backend ir must not be nil for AI backend type")
 	}
 
-	apiBackend := &api.Backend{
-		Name: be.AIIr.Name,
-		Kind: &api.Backend_Ai{
-			Ai: be.AIIr.Backend,
-		},
+	var apiBackends []*api.Backend
+	var policies []*api.Policy
+
+	for i, backendWithAuth := range be.AIIr.Backends {
+		backendName := be.AIIr.Name
+		if len(be.AIIr.Backends) > 1 {
+			backendName = fmt.Sprintf("%s-%d", be.AIIr.Name, i)
+		}
+
+		apiBackend := &api.Backend{
+			Name: backendName,
+			Kind: &api.Backend_Ai{
+				Ai: backendWithAuth.Backend,
+			},
+		}
+		apiBackends = append(apiBackends, apiBackend)
+
+		if backendWithAuth.AuthPolicy != nil {
+			authPolicy := &api.Policy{
+				Name: fmt.Sprintf("auth-%s", backendName),
+				Target: &api.PolicyTarget{Kind: &api.PolicyTarget_Backend{
+					Backend: backendName,
+				}},
+				Spec: &api.PolicySpec{Kind: &api.PolicySpec_Auth{
+					Auth: backendWithAuth.AuthPolicy,
+				}},
+			}
+			policies = append(policies, authPolicy)
+		}
 	}
-	authPolicy := &api.Policy{
-		Name: fmt.Sprintf("auth-%s", apiBackend.Name),
-		Target: &api.PolicyTarget{Kind: &api.PolicyTarget_Backend{
-			Backend: apiBackend.Name,
-		}},
-		Spec: &api.PolicySpec{Kind: &api.PolicySpec_Auth{
-			Auth: be.AIIr.AuthPolicy,
-		}},
-	}
-	return []*api.Backend{apiBackend}, []*api.Policy{authPolicy}, nil
+
+	return apiBackends, policies, nil
 }
