@@ -100,7 +100,7 @@ func translateLLMProviderToProvider(krtctx krt.HandlerContext, llm *v1alpha1.LLM
 	var auth *api.BackendAuthPolicy
 
 	if llm.HostOverride != nil {
-		provider.Override = &api.AIBackend_Override{
+		provider.HostOverride = &api.AIBackend_HostOverride{
 			Host: llm.HostOverride.Host,
 			Port: int32(llm.HostOverride.Port),
 		}
@@ -218,12 +218,18 @@ func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcoll
 
 	backendName := be.Namespace + "/" + be.Name
 	aiBackend := &api.AIBackend{
-		Providers: []*api.AIBackend_Provider{},
+		ProviderGroups: []*api.AIBackend_ProviderGroup{},
 	}
 	var policies []*api.Policy
+	providerIndex := 0
 
 	if be.Spec.AI.MultiPool != nil {
-		for providerIndex, priority := range be.Spec.AI.MultiPool.Priorities {
+		for _, priority := range be.Spec.AI.MultiPool.Priorities {
+			providerGroup := &api.AIBackend_ProviderGroup{
+				Providers: []*api.AIBackend_Provider{},
+			}
+
+			// Add all providers in this priority level to the same group
 			for _, llmProvider := range priority.Pool {
 				providerName := fmt.Sprintf("%s_%d", be.Name, providerIndex)
 
@@ -231,34 +237,44 @@ func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcoll
 				if err != nil {
 					return nil, fmt.Errorf("failed to translate provider in multipool: %w", err)
 				}
-				aiBackend.Providers = append(aiBackend.Providers, provider)
+				providerGroup.Providers = append(providerGroup.Providers, provider)
 
 				if policy := createAuthPolicy(authPolicy, backendName, providerName); policy != nil {
 					policies = append(policies, policy)
 				}
+				providerIndex++
+			}
+
+			if len(providerGroup.Providers) > 0 {
+				aiBackend.ProviderGroups = append(aiBackend.ProviderGroups, providerGroup)
 			}
 		}
 	} else if be.Spec.AI.LLM != nil {
+		providerGroup := &api.AIBackend_ProviderGroup{
+			Providers: []*api.AIBackend_Provider{},
+		}
+
 		// in a single provider case, the index is always 0
 		providerName := fmt.Sprintf("%s_%d", be.Name, 0)
 		provider, authPolicy, err := translateLLMProviderToProvider(krtctx, be.Spec.AI.LLM, providerName, secrets, be.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to translate LLM provider: %w", err)
 		}
-		aiBackend.Providers = append(aiBackend.Providers, provider)
+		providerGroup.Providers = append(providerGroup.Providers, provider)
 
 		if policy := createAuthPolicy(authPolicy, backendName, providerName); policy != nil {
 			policies = append(policies, policy)
 		}
+
+		aiBackend.ProviderGroups = append(aiBackend.ProviderGroups, providerGroup)
 	} else {
 		return nil, fmt.Errorf("AI backend has no valid LLM or MultiPool configuration")
 	}
 
-	if len(aiBackend.Providers) == 0 {
-		return nil, fmt.Errorf("no valid AI providers were translated")
+	if len(aiBackend.ProviderGroups) == 0 {
+		return nil, fmt.Errorf("no valid AI provider groups were translated")
 	}
 
-	// Create the Backend wrapper
 	backend := &api.Backend{
 		Name: backendName,
 		Kind: &api.Backend_Ai{
