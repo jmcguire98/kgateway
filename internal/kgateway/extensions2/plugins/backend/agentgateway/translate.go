@@ -24,6 +24,10 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
 )
 
+const (
+	authPolicyPrefix = "auth"
+)
+
 // BuildAgentGatewayBackendIr translates a Backend to an AgentGatewayBackendIr
 func BuildAgentGatewayBackendIr(
 	krtctx krt.HandlerContext,
@@ -197,7 +201,7 @@ func createAuthPolicy(authPolicy *api.BackendAuthPolicy, backendName, providerNa
 
 	subBackendTarget := fmt.Sprintf("%s/%s", backendName, providerName)
 	return &api.Policy{
-		Name: fmt.Sprintf("auth-%s-%s", backendName, providerName),
+		Name: fmt.Sprintf("%s-%s-%s", authPolicyPrefix, backendName, providerName),
 		Target: &api.PolicyTarget{
 			Kind: &api.PolicyTarget_SubBackend{
 				SubBackend: subBackendTarget,
@@ -212,11 +216,8 @@ func createAuthPolicy(authPolicy *api.BackendAuthPolicy, backendName, providerNa
 }
 
 func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcollections.SecretIndex) (*AIIr, error) {
-	if be.Spec.AI == nil {
-		return nil, fmt.Errorf("ai backend spec must not be nil for AI backend type")
-	}
 
-	backendName := be.Namespace + "/" + be.Name
+	backendName := utils.InternalBackendName(be.Namespace, be.Name, "")
 	aiBackend := &api.AIBackend{
 		ProviderGroups: []*api.AIBackend_ProviderGroup{},
 	}

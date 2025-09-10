@@ -50,10 +50,6 @@ func (t *AgentGatewayBackendTranslator) TranslateBackend(
 	if process.InitAgentBackend == nil {
 		return nil, nil, errors.New("no agent gateway backend plugin found for " + gk.String())
 	}
-	// Note: We don't check backend.Errors here because those are Envoy-specific errors.
-	// AgentGateway backends have their own error handling in the InitAgentBackend function.
-	// The AgentGateway IR is built independently and has its own error field that will be
-	// checked by the specific backend processor (e.g., ProcessAIBackendForAgentGateway).
 
 	backends, policies, err := process.InitAgentBackend(*backend)
 	if err != nil {
