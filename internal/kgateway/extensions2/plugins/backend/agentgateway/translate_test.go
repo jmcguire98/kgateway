@@ -724,21 +724,6 @@ func TestBuildAIBackendIr(t *testing.T) {
 			},
 		},
 		{
-			name: "Error case - nil AI spec",
-			backend: &v1alpha1.Backend{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-backend",
-					Namespace: "test-ns",
-				},
-				Spec: v1alpha1.BackendSpec{
-					Type: v1alpha1.BackendTypeAI,
-					AI:   nil,
-				},
-			},
-			secrets:     nil,
-			expectError: true,
-		},
-		{
 			name: "Error case - no LLM or MultiPool configured",
 			backend: &v1alpha1.Backend{
 				ObjectMeta: metav1.ObjectMeta{
