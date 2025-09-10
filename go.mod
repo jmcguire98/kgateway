@@ -4,7 +4,7 @@ go 1.24.6
 
 require (
 	// Also update AgentgatewayDefaultTag in pkg/deployer/wellknown.go
-	github.com/agentgateway/agentgateway v0.8.0
+	github.com/agentgateway/agentgateway v0.8.2-0.20250910194511-27161c9c6e8e
 	github.com/avast/retry-go v2.4.3+incompatible
 	github.com/avast/retry-go/v4 v4.3.3
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443
@@ -626,8 +626,6 @@ require (
 
 // Remove once https://github.com/kubernetes-sigs/controller-tools/pull/1224 merges
 replace sigs.k8s.io/controller-tools => github.com/shashankram/controller-tools v0.0.0-20250626172831-f7be064a9132
-
-replace github.com/agentgateway/agentgateway => github.com/jmcguire98/agentgateway v0.0.0-20250909135127-c4c6951ae71b
 
 replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.16
 
