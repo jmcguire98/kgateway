@@ -216,7 +216,6 @@ func createAuthPolicy(authPolicy *api.BackendAuthPolicy, backendName, providerNa
 }
 
 func buildAIIr(krtctx krt.HandlerContext, be *v1alpha1.Backend, secrets *krtcollections.SecretIndex) (*AIIr, error) {
-
 	backendName := utils.InternalBackendName(be.Namespace, be.Name, "")
 	aiBackend := &api.AIBackend{
 		ProviderGroups: []*api.AIBackend_ProviderGroup{},
