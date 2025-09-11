@@ -628,6 +628,62 @@ var _ = Describe("Deployer", func() {
 			cm := objs.findConfigMap(defaultNamespace, "agent-gateway")
 			Expect(cm).ToNot(BeNil())
 		})
+
+		It("clears RunAsUser for agentgateway when FloatingUserId=true", func() {
+			// enable floating user on kube config
+			gwp.Spec.Kube.FloatingUserId = ptr.To(true)
+			gw := &api.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "agent-gateway",
+					Namespace: defaultNamespace,
+				},
+				Spec: api.GatewaySpec{
+					GatewayClassName: "agentgateway",
+					Infrastructure: &api.GatewayInfrastructure{
+						ParametersRef: &api.LocalParametersReference{
+							Group: gw2_v1alpha1.GroupName,
+							Kind:  api.Kind(wellknown.GatewayParametersGVK.Kind),
+							Name:  gwp.GetName(),
+						},
+					},
+					Listeners: []api.Listener{{
+						Name: "listener-1",
+						Port: 80,
+					}},
+				},
+			}
+			gwParams := internaldeployer.NewGatewayParameters(newFakeClientWithObjs(gwc, gwp), &deployer.Inputs{
+				CommonCollections: newCommonCols(GinkgoT(), gwc, gw),
+				Dev:               false,
+				ControlPlane: deployer.ControlPlaneInfo{
+					XdsHost: "something.cluster.local",
+					XdsPort: 1234,
+				},
+				ImageInfo: &deployer.ImageInfo{
+					Registry: "foo",
+					Tag:      "bar",
+				},
+				GatewayClassName:         wellknown.DefaultGatewayClassName,
+				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
+				AgentGatewayClassName:    wellknown.DefaultAgentGatewayClassName,
+			})
+			chart, err := internaldeployer.LoadGatewayChart()
+			Expect(err).NotTo(HaveOccurred())
+			d := deployer.NewDeployer(wellknown.DefaultGatewayControllerName, newFakeClientWithObjs(gwc, gwp), chart,
+				gwParams,
+				internaldeployer.GatewayReleaseNameAndNamespace)
+
+			var objs clientObjects
+			objs, err = d.GetObjsToDeploy(context.Background(), gw)
+			Expect(err).NotTo(HaveOccurred())
+			objs = d.SetNamespaceAndOwner(gw, objs)
+
+			dep := objs.findDeployment(defaultNamespace, "agent-gateway")
+			Expect(dep).ToNot(BeNil())
+			expectedSecurityContext := dep.Spec.Template.Spec.Containers[0].SecurityContext
+			Expect(expectedSecurityContext).To(Not(BeNil()))
+			Expect(expectedSecurityContext.RunAsUser).To(BeNil())
+		})
 	})
 
 	Context("special cases", func() {
@@ -1851,7 +1907,7 @@ var _ = Describe("Deployer", func() {
 		}
 
 		aiSdsAndFloatingUserIdValidationFunc := func(objs clientObjects, inp *input) error {
-			return generalAiAndSdsValidationFunc(objs, inp, true) // true: don't expect null runAsUser
+			return generalAiAndSdsValidationFunc(objs, inp, true) // true: expect null runAsUser
 		}
 
 		DescribeTable("create and validate objs", func(inp *input, expected *expectedOutput) {
