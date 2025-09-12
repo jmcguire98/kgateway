@@ -632,6 +632,17 @@ var _ = Describe("Deployer", func() {
 		It("clears RunAsUser for agentgateway when FloatingUserId=true", func() {
 			// enable floating user on kube config
 			gwp.Spec.Kube.FloatingUserId = ptr.To(true)
+			// also set a PodSecurityContext and ensure it flows to the pod
+			uid := int64(12345)
+			gid := int64(23456)
+			fsGroup := int64(34567)
+			gwp.Spec.Kube.PodTemplate = &gw2_v1alpha1.Pod{
+				SecurityContext: &corev1.PodSecurityContext{
+					RunAsUser:  &uid,
+					RunAsGroup: &gid,
+					FSGroup:    &fsGroup,
+				},
+			}
 			gw := &api.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "agent-gateway",
@@ -673,17 +684,26 @@ var _ = Describe("Deployer", func() {
 				gwParams,
 				internaldeployer.GatewayReleaseNameAndNamespace)
 
-			var objs clientObjects
-			objs, err = d.GetObjsToDeploy(context.Background(), gw)
+			objsSlice, err := d.GetObjsToDeploy(context.Background(), gw)
 			Expect(err).NotTo(HaveOccurred())
-			objs = d.SetNamespaceAndOwner(gw, objs)
+			objsSlice = d.SetNamespaceAndOwner(gw, objsSlice)
 
+			objs := clientObjects(objsSlice)
 			dep := objs.findDeployment(defaultNamespace, "agent-gateway")
 			Expect(dep).ToNot(BeNil())
 			expectedSecurityContext := dep.Spec.Template.Spec.Containers[0].SecurityContext
 			Expect(expectedSecurityContext).To(Not(BeNil()))
 			Expect(expectedSecurityContext.RunAsUser).To(BeNil())
+			// assert pod-level security context is rendered and RunAsUser cleared while other fields preserved
+			psc := dep.Spec.Template.Spec.SecurityContext
+			Expect(psc).ToNot(BeNil())
+			Expect(psc.RunAsUser).To(BeNil())
+			Expect(psc.RunAsGroup).ToNot(BeNil())
+			Expect(psc.FSGroup).ToNot(BeNil())
+			Expect(*psc.RunAsGroup).To(Equal(gid))
+			Expect(*psc.FSGroup).To(Equal(fsGroup))
 		})
+
 	})
 
 	Context("special cases", func() {
