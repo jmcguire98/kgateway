@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -32,7 +33,6 @@ import (
 )
 
 var _ manager.LeaderElectionRunnable = &AgentGwStatusSyncer{}
-
 
 // policyStatusQueue implements status.Queue interface for Istio's StatusCollections
 type policyStatusQueue struct {
@@ -246,8 +246,12 @@ func (s *AgentGwStatusSyncer) syncPolicyStatus(ctx context.Context, logger *slog
 		Name:      policyStatusUpdate.Obj.GetName(),
 	}
 
-	// Get the policy kind and find the appropriate handler
-	kind := policyStatusUpdate.Obj.GetObjectKind().GroupVersionKind().Kind
+	gvk, err := apiutil.GVKForObject(policyStatusUpdate.Obj, s.mgr.GetScheme())
+	if err != nil {
+		logger.Error("failed to determine policy GVK", logKeyError, err, "policy", policyNameNs.String())
+		return
+	}
+	kind := gvk.Kind
 	handler, exists := s.policyStatusHandlers[kind]
 	if !exists {
 		logger.Error("unsupported policy type for status sync", "kind", kind, "policy", policyNameNs.String())
@@ -255,7 +259,7 @@ func (s *AgentGwStatusSyncer) syncPolicyStatus(ctx context.Context, logger *slog
 	}
 
 	// Use the handler with retry logic
-	err := retry.Do(func() error {
+	err = retry.Do(func() error {
 		return handler(ctx, s.mgr.GetClient(), policyNameNs, policyStatusUpdate.Status)
 	}, retry.Attempts(maxRetryAttempts), retry.Delay(retryDelay))
 
