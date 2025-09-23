@@ -32,6 +32,9 @@ import (
 
 var _ manager.LeaderElectionRunnable = &AgentGwStatusSyncer{}
 
+// AgentgatewayPolicyStatusSyncHandler defines a function that handles status syncing for a specific policy type
+type AgentgatewayPolicyStatusSyncHandler func(ctx context.Context, client client.Client, namespacedName types.NamespacedName, status gwv1alpha2.PolicyStatus) error
+
 // policyStatusQueue implements status.Queue interface for Istio's StatusCollections
 type policyStatusQueue struct {
 	asyncQueue *PolicyStatusAsyncQueue
@@ -71,6 +74,9 @@ type AgentGwStatusSyncer struct {
 	policyStatusQueue       utils.AsyncQueue[krt.ObjectWithStatus[controllers.Object, gwv1alpha2.PolicyStatus]]
 	policyStatusCollections *status.StatusCollections
 
+	// Policy status handlers
+	policyStatusHandlers map[string]AgentgatewayPolicyStatusSyncHandler
+
 	// Synchronization
 	cacheSyncs []cache.InformerSynced
 }
@@ -85,8 +91,9 @@ func NewAgwStatusSyncer(
 	routeReportQueue utils.AsyncQueue[RouteReports],
 	policyStatusCollections *status.StatusCollections,
 	cacheSyncs []cache.InformerSynced,
+	additionalPolicyStatusHandlers map[string]AgentgatewayPolicyStatusSyncHandler,
 ) *AgentGwStatusSyncer {
-	return &AgentGwStatusSyncer{
+	syncer := &AgentGwStatusSyncer{
 		controllerName:          controllerName,
 		agwClassName:            agwClassName,
 		client:                  client,
@@ -95,8 +102,27 @@ func NewAgwStatusSyncer(
 		listenerSetReportQueue:  listenerSetReportQueue,
 		routeReportQueue:        routeReportQueue,
 		policyStatusCollections: policyStatusCollections,
+		policyStatusHandlers:    make(map[string]AgentgatewayPolicyStatusSyncHandler),
 		cacheSyncs:              cacheSyncs,
 	}
+
+	// Register the built-in TrafficPolicy handler
+	syncer.RegisterPolicyStatusHandler("TrafficPolicy", syncer.syncTrafficPolicyStatusHandler)
+
+	// Register any additional handlers provided
+	for kind, handler := range additionalPolicyStatusHandlers {
+		syncer.RegisterPolicyStatusHandler(kind, handler)
+	}
+
+	return syncer
+}
+
+// RegisterPolicyStatusHandler registers a policy status handler for a specific policy kind
+func (s *AgentGwStatusSyncer) RegisterPolicyStatusHandler(kind string, handler AgentgatewayPolicyStatusSyncHandler) {
+	if s.policyStatusHandlers == nil {
+		s.policyStatusHandlers = make(map[string]AgentgatewayPolicyStatusSyncHandler)
+	}
+	s.policyStatusHandlers[kind] = handler
 }
 
 func (s *AgentGwStatusSyncer) Start(ctx context.Context) error {
@@ -167,15 +193,15 @@ func (s *AgentGwStatusSyncer) Start(ctx context.Context) error {
 		}
 	}()
 
-	// TrafficPolicy status syncer
+	// Policy status syncer
 	go func() {
 		for {
 			policyStatusUpdate, err := s.policyStatusQueue.Dequeue(ctx)
 			if err != nil {
-				logger.Error("failed to dequeue trafficpolicy status", "error", err)
+				logger.Error("failed to dequeue policy status", "error", err)
 				return
 			}
-			s.syncTrafficPolicyStatus(ctx, policyStatusLogger, policyStatusUpdate)
+			s.syncPolicyStatus(ctx, policyStatusLogger, policyStatusUpdate)
 		}
 	}()
 
@@ -183,7 +209,35 @@ func (s *AgentGwStatusSyncer) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *AgentGwStatusSyncer) syncTrafficPolicyStatus(ctx context.Context, logger *slog.Logger, policyStatusUpdate krt.ObjectWithStatus[controllers.Object, gwv1alpha2.PolicyStatus]) {
+// syncTrafficPolicyStatusHandler handles status syncing for TrafficPolicy resources
+func (s *AgentGwStatusSyncer) syncTrafficPolicyStatusHandler(ctx context.Context, client client.Client, namespacedName types.NamespacedName, status gwv1alpha2.PolicyStatus) error {
+	trafficpolicy := v1alpha1.TrafficPolicy{}
+	err := client.Get(ctx, namespacedName, &trafficpolicy)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil // Skip if not found
+		}
+		return err
+	}
+
+	// Update the trafficpolicy status directly
+	var ancestors []gwv1alpha2.PolicyAncestorStatus
+	for _, ancestor := range status.Ancestors {
+		ancestors = append(ancestors, gwv1alpha2.PolicyAncestorStatus{
+			AncestorRef:    ancestor.AncestorRef,
+			ControllerName: gwv1.GatewayController(ancestor.ControllerName),
+			Conditions:     ancestor.Conditions,
+		})
+	}
+	trafficpolicy.Status = gwv1alpha2.PolicyStatus{
+		Ancestors: ancestors,
+	}
+
+	return client.Status().Update(ctx, &trafficpolicy)
+}
+
+// syncPolicyStatus handles status syncing for all policy types with a registered policy status handler
+func (s *AgentGwStatusSyncer) syncPolicyStatus(ctx context.Context, logger *slog.Logger, policyStatusUpdate krt.ObjectWithStatus[controllers.Object, gwv1alpha2.PolicyStatus]) {
 	stopwatch := utils.NewTranslatorStopWatch("PolicyStatusSyncer")
 	stopwatch.Start()
 	defer stopwatch.Stop(ctx)
@@ -193,41 +247,23 @@ func (s *AgentGwStatusSyncer) syncTrafficPolicyStatus(ctx context.Context, logge
 		Name:      policyStatusUpdate.Obj.GetName(),
 	}
 
-	err := retry.Do(func() error {
-		trafficpolicy := v1alpha1.TrafficPolicy{}
-		err := s.mgr.GetClient().Get(ctx, policyNameNs, &trafficpolicy)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				logger.Debug("policy not found, skipping status update", "trafficpolicy", policyNameNs.String())
-				return nil
-			}
-			logger.Error("error getting trafficpolicy", logKeyError, err, "trafficpolicy", policyNameNs.String())
-			return err
-		}
+	// Get the policy kind and find the appropriate handler
+	kind := policyStatusUpdate.Obj.GetObjectKind().GroupVersionKind().Kind
+	handler, exists := s.policyStatusHandlers[kind]
+	if !exists {
+		logger.Error("unsupported policy type for status sync", "kind", kind, "policy", policyNameNs.String())
+		return
+	}
 
-		// Update the trafficpolicy status directly
-		var ancestors []gwv1alpha2.PolicyAncestorStatus
-		for _, ancestor := range policyStatusUpdate.Status.Ancestors {
-			ancestors = append(ancestors, gwv1alpha2.PolicyAncestorStatus{
-				AncestorRef:    ancestor.AncestorRef,
-				ControllerName: gwv1.GatewayController(ancestor.ControllerName),
-				Conditions:     ancestor.Conditions,
-			})
-		}
-		trafficpolicy.Status = gwv1alpha2.PolicyStatus{
-			Ancestors: ancestors,
-		}
-		err = s.mgr.GetClient().Status().Update(ctx, &trafficpolicy)
-		if err != nil {
-			logger.Error("error updating trafficpolicy status", logKeyError, err, "trafficpolicy", policyNameNs.String())
-			return err
-		}
-		logger.Debug("updated trafficpolicy status", "trafficpolicy", policyNameNs.String(), "status", trafficpolicy.Status)
-		return nil
+	// Use the handler with retry logic
+	err := retry.Do(func() error {
+		return handler(ctx, s.mgr.GetClient(), policyNameNs, policyStatusUpdate.Status)
 	}, retry.Attempts(maxRetryAttempts), retry.Delay(retryDelay))
 
 	if err != nil {
-		logger.Error("failed to sync trafficpolicy status after retries", logKeyError, err, "trafficpolicy", policyNameNs.String())
+		logger.Error("failed to sync policy status after retries", logKeyError, err, "policy", policyNameNs.String(), "kind", kind)
+	} else {
+		logger.Debug("updated policy status", "policy", policyNameNs.String(), "kind", kind, "status", policyStatusUpdate.Status)
 	}
 }
 

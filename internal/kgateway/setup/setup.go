@@ -23,6 +23,7 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/api/settings"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/admin"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/controller"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -159,6 +160,12 @@ func WithValidator(v validator.Validator) func(*setup) {
 	}
 }
 
+func WithExtraAgwPolicyStatusHandlers(handlers map[string]agentgatewaysyncer.AgentgatewayPolicyStatusSyncHandler) func(*setup) {
+	return func(s *setup) {
+		s.extraAgwPolicyStatusHandlers = handlers
+	}
+}
+
 type setup struct {
 	gatewayControllerName    string
 	agwControllerName        string
@@ -180,6 +187,7 @@ type setup struct {
 	globalSettings     *settings.Settings
 	leaderElectionID   string
 	validator          validator.Validator
+	extraAgwPolicyStatusHandlers map[string]agentgatewaysyncer.AgentgatewayPolicyStatusSyncHandler
 }
 
 var _ Server = &setup{}
@@ -340,6 +348,7 @@ func (s *setup) Start(ctx context.Context) error {
 		istioClient, commoncol, agwCollections, uccBuilder, s.extraPlugins, s.extraAgwPlugins,
 		s.extraGatewayParameters,
 		s.validator,
+		s.extraAgwPolicyStatusHandlers,
 	)
 
 	slog.Info("starting admin server")
@@ -373,6 +382,7 @@ func BuildKgatewayWithConfig(
 	extraAgwPlugins func(ctx context.Context, agw *agwplugins.AgwCollections) []agwplugins.AgwPlugin,
 	extraGatewayParameters func(cli client.Client, inputs *deployer.Inputs) []deployer.ExtraGatewayParameters,
 	validator validator.Validator,
+	extraAgwPolicyStatusHandlers map[string]agentgatewaysyncer.AgentgatewayPolicyStatusSyncHandler,
 ) error {
 	slog.Info("creating krt collections")
 	krtOpts := krtutil.NewKrtOptions(ctx.Done(), setupOpts.KrtDebugger)
@@ -407,6 +417,7 @@ func BuildKgatewayWithConfig(
 		CommonCollections:        commonCollections,
 		AgwCollections:           agwCollections,
 		Validator:                validator,
+		ExtraAgwPolicyStatusHandlers: extraAgwPolicyStatusHandlers,
 	})
 	if err != nil {
 		slog.Error("failed initializing controller: ", "error", err)
