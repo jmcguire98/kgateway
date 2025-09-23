@@ -27,13 +27,12 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
+	agwplugins "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/plugins"
 	"github.com/kgateway-dev/kgateway/v2/pkg/reports"
 )
 
 var _ manager.LeaderElectionRunnable = &AgentGwStatusSyncer{}
 
-// AgentgatewayPolicyStatusSyncHandler defines a function that handles status syncing for a specific policy type
-type AgentgatewayPolicyStatusSyncHandler func(ctx context.Context, client client.Client, namespacedName types.NamespacedName, status gwv1alpha2.PolicyStatus) error
 
 // policyStatusQueue implements status.Queue interface for Istio's StatusCollections
 type policyStatusQueue struct {
@@ -75,7 +74,7 @@ type AgentGwStatusSyncer struct {
 	policyStatusCollections *status.StatusCollections
 
 	// Policy status handlers
-	policyStatusHandlers map[string]AgentgatewayPolicyStatusSyncHandler
+	policyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler
 
 	// Synchronization
 	cacheSyncs []cache.InformerSynced
@@ -91,7 +90,7 @@ func NewAgwStatusSyncer(
 	routeReportQueue utils.AsyncQueue[RouteReports],
 	policyStatusCollections *status.StatusCollections,
 	cacheSyncs []cache.InformerSynced,
-	additionalPolicyStatusHandlers map[string]AgentgatewayPolicyStatusSyncHandler,
+	additionalPolicyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler,
 ) *AgentGwStatusSyncer {
 	syncer := &AgentGwStatusSyncer{
 		controllerName:          controllerName,
@@ -102,7 +101,7 @@ func NewAgwStatusSyncer(
 		listenerSetReportQueue:  listenerSetReportQueue,
 		routeReportQueue:        routeReportQueue,
 		policyStatusCollections: policyStatusCollections,
-		policyStatusHandlers:    make(map[string]AgentgatewayPolicyStatusSyncHandler),
+		policyStatusHandlers:    make(map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler),
 		cacheSyncs:              cacheSyncs,
 	}
 
@@ -118,9 +117,9 @@ func NewAgwStatusSyncer(
 }
 
 // RegisterPolicyStatusHandler registers a policy status handler for a specific policy kind
-func (s *AgentGwStatusSyncer) RegisterPolicyStatusHandler(kind string, handler AgentgatewayPolicyStatusSyncHandler) {
+func (s *AgentGwStatusSyncer) RegisterPolicyStatusHandler(kind string, handler agwplugins.AgentgatewayPolicyStatusSyncHandler) {
 	if s.policyStatusHandlers == nil {
-		s.policyStatusHandlers = make(map[string]AgentgatewayPolicyStatusSyncHandler)
+		s.policyStatusHandlers = make(map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler)
 	}
 	s.policyStatusHandlers[kind] = handler
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	xdsserver "github.com/envoyproxy/go-control-plane/pkg/server/v3"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/setup"
 	agwplugins "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/plugins"
 	"github.com/kgateway-dev/kgateway/v2/pkg/deployer"
@@ -36,7 +35,7 @@ type Options struct {
 	// Validator is the validator to use for the controller.
 	Validator validator.Validator
 	// ExtraAgwPolicyStatusHandlers maps policy kinds to their status sync handlers for AgentGateway
-	ExtraAgwPolicyStatusHandlers map[string]agentgatewaysyncer.AgentgatewayPolicyStatusSyncHandler
+	ExtraAgwPolicyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler
 }
 
 func New(opts Options) (setup.Server, error) {
