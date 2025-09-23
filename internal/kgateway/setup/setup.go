@@ -181,11 +181,11 @@ type setup struct {
 	restConfig               *rest.Config
 	ctrlMgrOptionsInitFunc   func(context.Context) *ctrl.Options
 	// extra controller manager config, like adding registering additional controllers
-	extraManagerConfig []func(ctx context.Context, mgr manager.Manager, objectFilter kubetypes.DynamicObjectFilter) error
-	krtDebugger        *krt.DebugHandler
-	globalSettings     *settings.Settings
-	leaderElectionID   string
-	validator          validator.Validator
+	extraManagerConfig           []func(ctx context.Context, mgr manager.Manager, objectFilter kubetypes.DynamicObjectFilter) error
+	krtDebugger                  *krt.DebugHandler
+	globalSettings               *settings.Settings
+	leaderElectionID             string
+	validator                    validator.Validator
 	extraAgwPolicyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler
 }
 
@@ -396,26 +396,26 @@ func BuildKgatewayWithConfig(
 
 	slog.Info("initializing controller")
 	c, err := controller.NewControllerBuilder(ctx, controller.StartConfig{
-		Manager:                  mgr,
-		ControllerName:           gatewayControllerName,
-		AgwControllerName:        agwControllerName,
-		GatewayClassName:         gatewayClassName,
-		WaypointGatewayClassName: waypointClassName,
-		AgentgatewayClassName:    agentgatewayClassName,
-		AdditionalGatewayClasses: additionalGatewayClasses,
-		ExtraPlugins:             extraPlugins,
-		ExtraAgwPlugins:          extraAgwPlugins,
-		ExtraGatewayParameters:   extraGatewayParameters,
-		RestConfig:               restConfig,
-		SetupOpts:                setupOpts,
-		Client:                   kubeClient,
-		AugmentedPods:            augmentedPods,
-		UniqueClients:            ucc,
-		Dev:                      logging.MustGetLevel(logging.DefaultComponent) <= logging.LevelTrace,
-		KrtOptions:               krtOpts,
-		CommonCollections:        commonCollections,
-		AgwCollections:           agwCollections,
-		Validator:                validator,
+		Manager:                      mgr,
+		ControllerName:               gatewayControllerName,
+		AgwControllerName:            agwControllerName,
+		GatewayClassName:             gatewayClassName,
+		WaypointGatewayClassName:     waypointClassName,
+		AgentgatewayClassName:        agentgatewayClassName,
+		AdditionalGatewayClasses:     additionalGatewayClasses,
+		ExtraPlugins:                 extraPlugins,
+		ExtraAgwPlugins:              extraAgwPlugins,
+		ExtraGatewayParameters:       extraGatewayParameters,
+		RestConfig:                   restConfig,
+		SetupOpts:                    setupOpts,
+		Client:                       kubeClient,
+		AugmentedPods:                augmentedPods,
+		UniqueClients:                ucc,
+		Dev:                          logging.MustGetLevel(logging.DefaultComponent) <= logging.LevelTrace,
+		KrtOptions:                   krtOpts,
+		CommonCollections:            commonCollections,
+		AgwCollections:               agwCollections,
+		Validator:                    validator,
 		ExtraAgwPolicyStatusHandlers: extraAgwPolicyStatusHandlers,
 	})
 	if err != nil {
