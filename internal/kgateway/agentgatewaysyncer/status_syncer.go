@@ -106,22 +106,22 @@ func NewAgwStatusSyncer(
 	}
 
 	// Register the built-in TrafficPolicy handler
-	syncer.RegisterPolicyStatusHandler("TrafficPolicy", syncer.syncTrafficPolicyStatusHandler)
+	syncer.RegisterPolicyStatusHandler(wellknown.TrafficPolicyGVK.String(), syncer.syncTrafficPolicyStatusHandler)
 
 	// Register any additional handlers provided
-	for kind, handler := range additionalPolicyStatusHandlers {
-		syncer.RegisterPolicyStatusHandler(kind, handler)
+	for gvk, handler := range additionalPolicyStatusHandlers {
+		syncer.RegisterPolicyStatusHandler(gvk, handler)
 	}
 
 	return syncer
 }
 
-// RegisterPolicyStatusHandler registers a policy status handler for a specific policy kind
-func (s *AgentGwStatusSyncer) RegisterPolicyStatusHandler(kind string, handler agwplugins.AgwPolicyStatusSyncHandler) {
+// RegisterPolicyStatusHandler registers a policy status handler for a specific policy GVK
+func (s *AgentGwStatusSyncer) RegisterPolicyStatusHandler(gvk string, handler agwplugins.AgwPolicyStatusSyncHandler) {
 	if s.policyStatusHandlers == nil {
 		s.policyStatusHandlers = make(map[string]agwplugins.AgwPolicyStatusSyncHandler)
 	}
-	s.policyStatusHandlers[kind] = handler
+	s.policyStatusHandlers[gvk] = handler
 }
 
 func (s *AgentGwStatusSyncer) Start(ctx context.Context) error {
@@ -214,8 +214,8 @@ func (s *AgentGwStatusSyncer) syncTrafficPolicyStatusHandler(ctx context.Context
 	err := client.Get(ctx, namespacedName, &trafficpolicy)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Debug("skipping status sync for trafficpolicy, resource not found", "namespacedName", namespacedName)
-			return nil // Skip if not found
+			logger.Debug("skipping status sync for trafficpolicy, resource not found", "namespaced_name", namespacedName.String())
+			return nil
 		}
 		return err
 	}
@@ -252,10 +252,9 @@ func (s *AgentGwStatusSyncer) syncPolicyStatus(ctx context.Context, logger *slog
 		logger.Error("failed to determine policy GVK", logKeyError, err, "policy", policyNameNs.String())
 		return
 	}
-	kind := gvk.Kind
-	handler, exists := s.policyStatusHandlers[kind]
+	handler, exists := s.policyStatusHandlers[gvk.String()]
 	if !exists {
-		logger.Error("unsupported policy type for status sync", "kind", kind, "policy", policyNameNs.String())
+		logger.Error("unsupported policy type for status sync", "gvk", gvk.String(), "policy", policyNameNs.String())
 		return
 	}
 
@@ -265,9 +264,9 @@ func (s *AgentGwStatusSyncer) syncPolicyStatus(ctx context.Context, logger *slog
 	}, retry.Attempts(maxRetryAttempts), retry.Delay(retryDelay))
 
 	if err != nil {
-		logger.Error("failed to sync policy status after retries", logKeyError, err, "policy", policyNameNs.String(), "kind", kind)
+		logger.Error("failed to sync policy status after retries", logKeyError, err, "policy", policyNameNs.String(), "gvk", gvk.String())
 	} else {
-		logger.Debug("updated policy status", "policy", policyNameNs.String(), "kind", kind, "status", policyStatusUpdate.Status)
+		logger.Debug("updated policy status", "policy", policyNameNs.String(), "kind", gvk.String(), "status", policyStatusUpdate.Status)
 	}
 }
 
