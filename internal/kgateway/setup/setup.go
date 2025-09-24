@@ -159,7 +159,7 @@ func WithValidator(v validator.Validator) func(*setup) {
 	}
 }
 
-func WithExtraAgwPolicyStatusHandlers(handlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler) func(*setup) {
+func WithExtraAgwPolicyStatusHandlers(handlers map[string]agwplugins.AgwPolicyStatusSyncHandler) func(*setup) {
 	return func(s *setup) {
 		s.extraAgwPolicyStatusHandlers = handlers
 	}
@@ -186,7 +186,7 @@ type setup struct {
 	globalSettings               *settings.Settings
 	leaderElectionID             string
 	validator                    validator.Validator
-	extraAgwPolicyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler
+	extraAgwPolicyStatusHandlers map[string]agwplugins.AgwPolicyStatusSyncHandler
 }
 
 var _ Server = &setup{}
@@ -381,7 +381,7 @@ func BuildKgatewayWithConfig(
 	extraAgwPlugins func(ctx context.Context, agw *agwplugins.AgwCollections) []agwplugins.AgwPlugin,
 	extraGatewayParameters func(cli client.Client, inputs *deployer.Inputs) []deployer.ExtraGatewayParameters,
 	validator validator.Validator,
-	extraAgwPolicyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler,
+	extraAgwPolicyStatusHandlers map[string]agwplugins.AgwPolicyStatusSyncHandler,
 ) error {
 	slog.Info("creating krt collections")
 	krtOpts := krtutil.NewKrtOptions(ctx.Done(), setupOpts.KrtDebugger)

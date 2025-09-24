@@ -36,7 +36,7 @@ type Options struct {
 	// Validator is the validator to use for the controller.
 	Validator validator.Validator
 	// ExtraAgwPolicyStatusHandlers maps policy kinds to their status sync handlers for AgentGateway
-	ExtraAgwPolicyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler
+	ExtraAgwPolicyStatusHandlers map[string]agwplugins.AgwPolicyStatusSyncHandler
 }
 
 func New(opts Options) (setup.Server, error) {

@@ -74,7 +74,7 @@ type AgentGwStatusSyncer struct {
 	policyStatusCollections *status.StatusCollections
 
 	// Policy status handlers
-	policyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler
+	policyStatusHandlers map[string]agwplugins.AgwPolicyStatusSyncHandler
 
 	// Synchronization
 	cacheSyncs []cache.InformerSynced
@@ -90,7 +90,7 @@ func NewAgwStatusSyncer(
 	routeReportQueue utils.AsyncQueue[RouteReports],
 	policyStatusCollections *status.StatusCollections,
 	cacheSyncs []cache.InformerSynced,
-	additionalPolicyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler,
+	additionalPolicyStatusHandlers map[string]agwplugins.AgwPolicyStatusSyncHandler,
 ) *AgentGwStatusSyncer {
 	syncer := &AgentGwStatusSyncer{
 		controllerName:          controllerName,
@@ -101,7 +101,7 @@ func NewAgwStatusSyncer(
 		listenerSetReportQueue:  listenerSetReportQueue,
 		routeReportQueue:        routeReportQueue,
 		policyStatusCollections: policyStatusCollections,
-		policyStatusHandlers:    make(map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler),
+		policyStatusHandlers:    make(map[string]agwplugins.AgwPolicyStatusSyncHandler),
 		cacheSyncs:              cacheSyncs,
 	}
 
@@ -117,9 +117,9 @@ func NewAgwStatusSyncer(
 }
 
 // RegisterPolicyStatusHandler registers a policy status handler for a specific policy kind
-func (s *AgentGwStatusSyncer) RegisterPolicyStatusHandler(kind string, handler agwplugins.AgentgatewayPolicyStatusSyncHandler) {
+func (s *AgentGwStatusSyncer) RegisterPolicyStatusHandler(kind string, handler agwplugins.AgwPolicyStatusSyncHandler) {
 	if s.policyStatusHandlers == nil {
-		s.policyStatusHandlers = make(map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler)
+		s.policyStatusHandlers = make(map[string]agwplugins.AgwPolicyStatusSyncHandler)
 	}
 	s.policyStatusHandlers[kind] = handler
 }
@@ -214,6 +214,7 @@ func (s *AgentGwStatusSyncer) syncTrafficPolicyStatusHandler(ctx context.Context
 	err := client.Get(ctx, namespacedName, &trafficpolicy)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			logger.Debug("skipping status sync for trafficpolicy, resource not found", "namespacedName", namespacedName)
 			return nil // Skip if not found
 		}
 		return err

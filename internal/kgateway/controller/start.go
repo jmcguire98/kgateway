@@ -85,7 +85,7 @@ type StartConfig struct {
 	UniqueClients     krt.Collection[ir.UniqlyConnectedClient]
 
 	KrtOptions                   krtutil.KrtOptions
-	ExtraAgwPolicyStatusHandlers map[string]agwplugins.AgentgatewayPolicyStatusSyncHandler
+	ExtraAgwPolicyStatusHandlers map[string]agwplugins.AgwPolicyStatusSyncHandler
 }
 
 // Start runs the controllers responsible for processing the K8s Gateway API objects
