@@ -1,4 +1,4 @@
-package agentgatewaysyncer
+package translator
 
 import (
 	"fmt"
@@ -29,7 +29,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/reports"
 )
 
-// AgwRouteCollection creates the collection of translated routes
+// AgwRouteCollection creates the collection of translated Routes
 func AgwRouteCollection(
 	httpRouteCol krt.Collection[*gwv1.HTTPRoute],
 	grpcRouteCol krt.Collection[*gwv1.GRPCRoute],
@@ -52,7 +52,7 @@ func AgwRouteCollection(
 						if m != nil {
 							r.Matches = []gwv1.HTTPRouteMatch{*m}
 						}
-						res, err := convertHTTPRouteToAgw(ctx, r, obj, n, idx)
+						res, err := ConvertHTTPRouteToAgw(ctx, r, obj, n, idx)
 						if !yield(AgwRoute{Route: res}, err) {
 							return
 						}
@@ -67,7 +67,7 @@ func AgwRouteCollection(
 			return ctx, func(yield func(AgwRoute, *reporter.RouteCondition) bool) {
 				for n, r := range route.Rules {
 					// Convert the entire rule with all matches at once
-					res, err := convertGRPCRouteToAgw(ctx, r, obj, n)
+					res, err := ConvertGRPCRouteToAgw(ctx, r, obj, n)
 					if !yield(AgwRoute{Route: res}, err) {
 						return
 					}
@@ -81,7 +81,7 @@ func AgwRouteCollection(
 			return ctx, func(yield func(AgwTCPRoute, *reporter.RouteCondition) bool) {
 				for n, r := range route.Rules {
 					// Convert the entire rule with all matches at once
-					res, err := convertTCPRouteToAgw(ctx, r, obj, n)
+					res, err := ConvertTCPRouteToAgw(ctx, r, obj, n)
 					if !yield(AgwTCPRoute{TCPRoute: res}, err) {
 						return
 					}
@@ -95,7 +95,7 @@ func AgwRouteCollection(
 			return ctx, func(yield func(AgwTCPRoute, *reporter.RouteCondition) bool) {
 				for n, r := range route.Rules {
 					// Convert the entire rule with all matches at once
-					res, err := convertTLSRouteToAgw(ctx, r, obj, n)
+					res, err := ConvertTLSRouteToAgw(ctx, r, obj, n)
 					if !yield(AgwTCPRoute{TCPRoute: res}, err) {
 						return
 					}
@@ -108,23 +108,23 @@ func AgwRouteCollection(
 	return routes
 }
 
-// processParentReferences processes filtered parent references and builds resources per gateway.
+// ProcessParentReferences processes filtered parent references and builds resources per gateway.
 // It emits exactly one ParentStatus per Gateway (aggregate across listeners).
 // If no listeners are allowed, the Accepted reason is:
 //   - NotAllowedByListeners  => when the parent Gateway is cross-namespace w.r.t. the route
 //   - NoMatchingListenerHostname => otherwise
-func processParentReferences[T any](
-	parentRefs []routeParentReference,
-	gwResult conversionResult[T],
+func ProcessParentReferences[T any](
+	parentRefs []RouteParentReference,
+	gwResult ConversionResult[T],
 	routeNN types.NamespacedName, // <-- route namespace/name so we can detect cross-NS parents
 	routeReporter reporter.RouteReporter,
-	resourceMapper func(T, routeParentReference) *api.Resource,
+	resourceMapper func(T, RouteParentReference) *api.Resource,
 ) map[types.NamespacedName][]*api.Resource {
 	resourcesPerGateway := make(map[types.NamespacedName][]*api.Resource)
 
-	// Build the "allowed" set from filteredReferences (listener-scoped).
+	// Build the "allowed" set from FilteredReferences (listener-scoped).
 	allowed := make(map[string]struct{})
-	for _, p := range filteredReferences(parentRefs) {
+	for _, p := range FilteredReferences(parentRefs) {
 		if p.ParentKey.Kind != wellknown.GatewayGVK {
 			continue
 		}
@@ -135,7 +135,7 @@ func processParentReferences[T any](
 	// Aggregate per Gateway for status; also track whether any raw parent was cross-namespace.
 	type gwAgg struct {
 		anyAllowed bool
-		rep        routeParentReference
+		rep        RouteParentReference
 	}
 	agg := make(map[types.NamespacedName]*gwAgg)
 	crossNS := make(map[types.NamespacedName]bool)
@@ -154,7 +154,7 @@ func processParentReferences[T any](
 	}
 
 	// If conversion (backend/filter resolution) failed, ResolvedRefs=False for all parents.
-	resolvedOK := (gwResult.error == nil)
+	resolvedOK := (gwResult.Error == nil)
 
 	// Consider each raw parentRef (listener-scoped) for mapping.
 	for _, parent := range parentRefs {
@@ -174,7 +174,7 @@ func processParentReferences[T any](
 			continue
 		}
 		var mapped []*api.Resource
-		routes := gwResult.routes
+		routes := gwResult.Routes
 		mapped = make([]*api.Resource, 0, len(routes))
 		for i := range routes {
 			if r := resourceMapper(routes[i], parent); r != nil {
@@ -197,7 +197,7 @@ func processParentReferences[T any](
 			prStatusRef.SectionName = nil
 		}
 		pr := routeReporter.ParentRef(&prStatusRef)
-		resolvedReason := reasonResolvedRefs(gwResult.error, resolvedOK)
+		resolvedReason := reasonResolvedRefs(gwResult.Error, resolvedOK)
 
 		if a.anyAllowed {
 			pr.SetCondition(reporter.RouteCondition{
@@ -239,8 +239,8 @@ func processParentReferences[T any](
 			}(),
 			Reason: resolvedReason,
 			Message: func() string {
-				if gwResult.error != nil {
-					return gwResult.error.Message
+				if gwResult.Error != nil {
+					return gwResult.Error.Message
 				}
 				return ""
 			}(),
@@ -264,7 +264,7 @@ func reasonResolvedRefs(cond *reporter.RouteCondition, ok bool) gwv1.RouteCondit
 // buildAttachedRoutesMapAllowed is the same as buildAttachedRoutesMap,
 // but only for already-evaluated, allowed parentRefs.
 func buildAttachedRoutesMapAllowed(
-	allowedParents []routeParentReference,
+	allowedParents []RouteParentReference,
 	routeNN types.NamespacedName,
 ) map[types.NamespacedName]map[string]uint {
 	attached := make(map[types.NamespacedName]map[string]uint)
@@ -303,7 +303,7 @@ func createRouteCollectionGeneric[T controllers.Object, R comparable](
 	krtopts krtutil.KrtOptions,
 	collectionName string,
 	translator func(ctx RouteContext, obj T, rep reporter.Reporter) (RouteContext, iter.Seq2[R, *reporter.RouteCondition]),
-	resourceTransformer func(route R, parent routeParentReference) *api.Resource,
+	resourceTransformer func(route R, parent RouteParentReference) *api.Resource,
 ) krt.Collection[agwir.AgwResourcesForGateway] {
 	return krt.NewManyCollection(routeCol, func(krtctx krt.HandlerContext, obj T) []agwir.AgwResourcesForGateway {
 		logger.Debug("translating route", "route_name", obj.GetName(), "resource_version", obj.GetResourceVersion())
@@ -322,12 +322,12 @@ func createRouteCollectionGeneric[T controllers.Object, R comparable](
 
 		// gateway -> section name -> route count
 		routeNN := types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}
-		ln := listenersPerGateway(parentRefs)
-		allowedParents := filteredReferences(parentRefs)
+		ln := ListenersPerGateway(parentRefs)
+		allowedParents := FilteredReferences(parentRefs)
 		attachedRoutes := buildAttachedRoutesMapAllowed(allowedParents, routeNN)
-		ensureZeroes(attachedRoutes, ln)
+		EnsureZeroes(attachedRoutes, ln)
 
-		resourcesPerGateway := processParentReferences[R](
+		resourcesPerGateway := ProcessParentReferences[R](
 			parentRefs,
 			gwResult,
 			routeNN,
@@ -357,7 +357,7 @@ func createRouteCollectionGeneric[T controllers.Object, R comparable](
 				routeCounts = ar
 			}
 
-			results = append(results, toResourceWithRoutes(gw, resources, routeCounts, rm))
+			results = append(results, ToResourceWithRoutes(gw, resources, routeCounts, rm))
 		}
 		return results
 	}, krtopts.ToOptions(collectionName)...)
@@ -377,7 +377,7 @@ func createRouteCollection[T controllers.Object](
 		krtopts,
 		collectionName,
 		translator,
-		func(e AgwRoute, parent routeParentReference) *api.Resource {
+		func(e AgwRoute, parent RouteParentReference) *api.Resource {
 			inner := protomarshal.Clone(e.Route)
 			_, name, _ := strings.Cut(parent.InternalName, "/")
 			inner.ListenerKey = name
@@ -386,7 +386,7 @@ func createRouteCollection[T controllers.Object](
 			} else {
 				inner.Key = inner.GetKey()
 			}
-			return toAgwResource(AgwRoute{Route: inner})
+			return ToAgwResource(AgwRoute{Route: inner})
 		},
 	)
 }
@@ -405,17 +405,17 @@ func createTCPRouteCollection[T controllers.Object](
 		krtopts,
 		collectionName,
 		translator,
-		func(e AgwTCPRoute, parent routeParentReference) *api.Resource {
+		func(e AgwTCPRoute, parent RouteParentReference) *api.Resource {
 			// TCP route wrapper doesn't expose a `Route` field like HTTP.
 			// For TCP we don't mutate ListenerKey/Key here; just pass through.
-			return toAgwResource(e)
+			return ToAgwResource(e)
 		},
 	)
 }
 
-// listenersPerGateway returns the set of listener sectionNames referenced for each parent Gateway,
+// ListenersPerGateway returns the set of listener sectionNames referenced for each parent Gateway,
 // regardless of whether they are allowed.
-func listenersPerGateway(parentRefs []routeParentReference) map[types.NamespacedName]map[string]struct{} {
+func ListenersPerGateway(parentRefs []RouteParentReference) map[types.NamespacedName]map[string]struct{} {
 	l := make(map[types.NamespacedName]map[string]struct{})
 	for _, p := range parentRefs {
 		if p.ParentKey.Kind != wellknown.GatewayGVK {
@@ -430,9 +430,9 @@ func listenersPerGateway(parentRefs []routeParentReference) map[types.Namespaced
 	return l
 }
 
-// ensureZeroes pre-populates attachedRoutes with explicit 0 entries for every referenced listener,
+// EnsureZeroes pre-populates AttachedRoutes with explicit 0 entries for every referenced listener,
 // so writers that "replace" rather than "merge" will correctly set zero.
-func ensureZeroes(
+func EnsureZeroes(
 	attached map[types.NamespacedName]map[string]uint,
 	ln map[types.NamespacedName]map[string]struct{},
 ) {
@@ -448,9 +448,9 @@ func ensureZeroes(
 	}
 }
 
-type conversionResult[O any] struct {
-	error  *reporter.RouteCondition
-	routes []O
+type ConversionResult[O any] struct {
+	Error  *reporter.RouteCondition
+	Routes []O
 }
 
 // IsNil works around comparing generic types
@@ -463,22 +463,22 @@ func IsNil[O comparable](o O) bool {
 func computeRoute[T controllers.Object, O comparable](ctx RouteContext, obj T, translator func(
 	obj T,
 ) iter.Seq2[O, *reporter.RouteCondition],
-) ([]routeParentReference, conversionResult[O]) {
+) ([]RouteParentReference, ConversionResult[O]) {
 	parentRefs := extractParentReferenceInfo(ctx, ctx.RouteParents, obj)
 
-	convertRules := func() conversionResult[O] {
-		res := conversionResult[O]{}
+	convertRules := func() ConversionResult[O] {
+		res := ConversionResult[O]{}
 		for vs, err := range translator(obj) {
-			// This was a hard error
+			// This was a hard Error
 			if err != nil && IsNil(vs) {
-				res.error = err
-				return conversionResult[O]{error: err}
+				res.Error = err
+				return ConversionResult[O]{Error: err}
 			}
-			// Got an error but also routes
+			// Got an error but also Routes
 			if err != nil {
-				res.error = err
+				res.Error = err
 			}
-			res.routes = append(res.routes, vs)
+			res.Routes = append(res.Routes, vs)
 		}
 		return res
 	}
@@ -497,6 +497,7 @@ type RouteContext struct {
 	pluginPasses     []agwir.AgwTranslationPass
 }
 
+// RouteContextInputs defines the collections needed to translate a route.
 type RouteContextInputs struct {
 	Grants          ReferenceGrants
 	RouteParents    RouteParents
@@ -516,9 +517,9 @@ func (i RouteContextInputs) WithCtx(krtctx krt.HandlerContext) RouteContext {
 	}
 }
 
+// RouteWithKey is a wrapper for a Route
 type RouteWithKey struct {
 	*Config
-	Key string
 }
 
 func (r RouteWithKey) ResourceName() string {
@@ -529,7 +530,7 @@ func (r RouteWithKey) Equals(o RouteWithKey) bool {
 	return r.Config.Equals(o.Config)
 }
 
-// buildGatewayRoutes contains common logic to build a set of routes with v1/alpha2 semantics
+// buildGatewayRoutes contains common logic to build a set of Routes with v1/alpha2 semantics
 func buildGatewayRoutes[T any](convertRules func() T) T {
 	return convertRules()
 }

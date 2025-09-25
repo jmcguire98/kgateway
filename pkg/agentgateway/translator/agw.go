@@ -1,4 +1,4 @@
-package agentgatewaysyncer
+package translator
 
 import (
 	"fmt"
@@ -13,7 +13,8 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
 )
 
-func createAgwMethodMatch(match gwv1.HTTPRouteMatch) (*api.MethodMatch, *reporter.RouteCondition) {
+// CreateAgwMethodMatch creates an agw MethodMatch from a HTTPRouteMatch.
+func CreateAgwMethodMatch(match gwv1.HTTPRouteMatch) (*api.MethodMatch, *reporter.RouteCondition) {
 	if match.Method == nil {
 		return nil, nil
 	}
@@ -22,7 +23,8 @@ func createAgwMethodMatch(match gwv1.HTTPRouteMatch) (*api.MethodMatch, *reporte
 	}, nil
 }
 
-func createAgwQueryMatch(match gwv1.HTTPRouteMatch) ([]*api.QueryMatch, *reporter.RouteCondition) {
+// CreateAgwQueryMatch creates an agw QueryMatch from a HTTPRouteMatch.
+func CreateAgwQueryMatch(match gwv1.HTTPRouteMatch) ([]*api.QueryMatch, *reporter.RouteCondition) {
 	res := []*api.QueryMatch{}
 	for _, header := range match.QueryParams {
 		tp := gwv1.QueryParamMatchExact
@@ -55,7 +57,8 @@ func createAgwQueryMatch(match gwv1.HTTPRouteMatch) ([]*api.QueryMatch, *reporte
 	return res, nil
 }
 
-func createAgwPathMatch(match gwv1.HTTPRouteMatch) (*api.PathMatch, *reporter.RouteCondition) {
+// CreateAgwPathMatch creates an agw PathMatch from a HTTPRouteMatch.
+func CreateAgwPathMatch(match gwv1.HTTPRouteMatch) (*api.PathMatch, *reporter.RouteCondition) {
 	if match.Path == nil {
 		return nil, nil
 	}
@@ -111,7 +114,8 @@ func createAgwPathMatch(match gwv1.HTTPRouteMatch) (*api.PathMatch, *reporter.Ro
 	}
 }
 
-func createAgwHeadersMatch(match gwv1.HTTPRouteMatch) ([]*api.HeaderMatch, *reporter.RouteCondition) {
+// CreateAgwHeadersMatch creates an agw HeadersMatch from a HTTPRouteMatch.
+func CreateAgwHeadersMatch(match gwv1.HTTPRouteMatch) ([]*api.HeaderMatch, *reporter.RouteCondition) {
 	var res []*api.HeaderMatch
 	for _, header := range match.Headers {
 		tp := gwv1.HeaderMatchExact
@@ -145,7 +149,8 @@ func createAgwHeadersMatch(match gwv1.HTTPRouteMatch) ([]*api.HeaderMatch, *repo
 	return res, nil
 }
 
-func createAgwHeadersFilter(filter *gwv1.HTTPHeaderFilter) *api.RouteFilter {
+// CreateAgwHeadersFilter creates an agw RouteFilter based on a HTTPHeaderFilter
+func CreateAgwHeadersFilter(filter *gwv1.HTTPHeaderFilter) *api.RouteFilter {
 	if filter == nil {
 		return nil
 	}
@@ -160,7 +165,8 @@ func createAgwHeadersFilter(filter *gwv1.HTTPHeaderFilter) *api.RouteFilter {
 	}
 }
 
-func createAgwResponseHeadersFilter(filter *gwv1.HTTPHeaderFilter) *api.RouteFilter {
+// CreateAgwResponseHeadersFilter creates an agw RouteFilter based on a HTTPHeaderFilter
+func CreateAgwResponseHeadersFilter(filter *gwv1.HTTPHeaderFilter) *api.RouteFilter {
 	if filter == nil {
 		return nil
 	}
@@ -175,7 +181,8 @@ func createAgwResponseHeadersFilter(filter *gwv1.HTTPHeaderFilter) *api.RouteFil
 	}
 }
 
-func createAgwRewriteFilter(filter *gwv1.HTTPURLRewriteFilter) *api.RouteFilter {
+// CreateAgwRewriteFilter creates an agw RouteFilter based on a HTTPURLRewriteFilter
+func CreateAgwRewriteFilter(filter *gwv1.HTTPURLRewriteFilter) *api.RouteFilter {
 	if filter == nil {
 		return nil
 	}
@@ -202,7 +209,8 @@ func createAgwRewriteFilter(filter *gwv1.HTTPURLRewriteFilter) *api.RouteFilter 
 	}
 }
 
-func createAgwMirrorFilter(
+// CreateAgwMirrorFilter creates an agw RouteFilter based on a HTTPRequestMirrorFilter
+func CreateAgwMirrorFilter(
 	ctx RouteContext,
 	filter *gwv1.HTTPRequestMirrorFilter,
 	ns string,
@@ -243,7 +251,8 @@ func createAgwMirrorFilter(
 	return &api.RouteFilter{Kind: &api.RouteFilter_RequestMirror{RequestMirror: rm}}, nil
 }
 
-func createAgwRedirectFilter(filter *gwv1.HTTPRequestRedirectFilter) *api.RouteFilter {
+// CreateAgwRedirectFilter converts a HTTPRequestRedirectFilter into an api.RouteFilter for request redirection.
+func CreateAgwRedirectFilter(filter *gwv1.HTTPRequestRedirectFilter) *api.RouteFilter {
 	if filter == nil {
 		return nil
 	}
@@ -292,8 +301,8 @@ func headerListToAgw(hl []gwv1.HTTPHeader) []*api.Header {
 	})
 }
 
-// GRPC-specific Agw conversion functions
-func createAgwGRPCHeadersMatch(match gwv1.GRPCRouteMatch) ([]*api.HeaderMatch, *reporter.RouteCondition) {
+// CreateAgwGRPCHeadersMatch creates an agw HeaderMatch from a GRPCRouteMatch.
+func CreateAgwGRPCHeadersMatch(match gwv1.GRPCRouteMatch) ([]*api.HeaderMatch, *reporter.RouteCondition) {
 	var res []*api.HeaderMatch
 	for _, header := range match.Headers {
 		tp := gwv1.GRPCHeaderMatchExact
@@ -327,7 +336,8 @@ func createAgwGRPCHeadersMatch(match gwv1.GRPCRouteMatch) ([]*api.HeaderMatch, *
 	return res, nil
 }
 
-func buildAgwGRPCFilters(
+// BuildAgwGRPCFilters constructs gRPC route filters for agent gateway based on the input filters and route context.
+func BuildAgwGRPCFilters(
 	ctx RouteContext,
 	ns string,
 	inputFilters []gwv1.GRPCRouteFilter,
@@ -337,19 +347,19 @@ func buildAgwGRPCFilters(
 	for _, filter := range inputFilters {
 		switch filter.Type {
 		case gwv1.GRPCRouteFilterRequestHeaderModifier:
-			h := createAgwHeadersFilter(filter.RequestHeaderModifier)
+			h := CreateAgwHeadersFilter(filter.RequestHeaderModifier)
 			if h == nil {
 				continue
 			}
 			filters = append(filters, h)
 		case gwv1.GRPCRouteFilterResponseHeaderModifier:
-			h := createAgwResponseHeadersFilter(filter.ResponseHeaderModifier)
+			h := CreateAgwResponseHeadersFilter(filter.ResponseHeaderModifier)
 			if h == nil {
 				continue
 			}
 			filters = append(filters, h)
 		case gwv1.GRPCRouteFilterRequestMirror:
-			h, err := createAgwMirrorFilter(ctx, filter.RequestMirror, ns, schema.GroupVersionKind{
+			h, err := CreateAgwMirrorFilter(ctx, filter.RequestMirror, ns, schema.GroupVersionKind{
 				Group:   "gateway.networking.k8s.io",
 				Version: "v1",
 				Kind:    "GRPCRoute",
@@ -402,7 +412,7 @@ func buildAgwGRPCDestination(
 			}
 		}
 		if dst != nil {
-			filters, err := buildAgwGRPCFilters(ctx, ns, fwd.Filters)
+			filters, err := BuildAgwGRPCFilters(ctx, ns, fwd.Filters)
 			if err != nil {
 				return nil, nil, err
 			}

@@ -1,4 +1,4 @@
-package agentgatewaysyncer
+package translator
 
 import (
 	"fmt"
@@ -9,7 +9,8 @@ import (
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func applyTimeouts(rule *gwv1.HTTPRouteRule, route *api.Route) error {
+// ApplyTimeouts applies timeouts to an agw route
+func ApplyTimeouts(rule *gwv1.HTTPRouteRule, route *api.Route) error {
 	if rule == nil || rule.Timeouts == nil {
 		return nil
 	}
@@ -33,7 +34,8 @@ func applyTimeouts(rule *gwv1.HTTPRouteRule, route *api.Route) error {
 	return nil
 }
 
-func applyRetries(rule *gwv1.HTTPRouteRule, route *api.Route) error {
+// ApplyRetries applies retries to an agw route
+func ApplyRetries(rule *gwv1.HTTPRouteRule, route *api.Route) error {
 	if rule == nil || rule.Retry == nil {
 		return nil
 	}

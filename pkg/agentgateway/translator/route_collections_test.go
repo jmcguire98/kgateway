@@ -1,4 +1,4 @@
-package agentgatewaysyncer
+package translator
 
 import (
 	"context"
@@ -111,12 +111,12 @@ func TestAgwRouteCollection(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					parent: parentKey{
+					Parent: ParentKey{
 						Kind:      wellknown.GatewayGVK,
 						Name:      "test-gateway",
 						Namespace: "default",
 					},
-					parentInfo: parentInfo{
+					ParentInfo: ParentInfo{
 						InternalName: "default/test-gateway",
 						Protocol:     gwv1.HTTPProtocolType,
 						Port:         80,
@@ -161,7 +161,7 @@ func TestAgwRouteCollection(t *testing.T) {
 			},
 		},
 		{
-			name: "Two HTTP routes on same gateway",
+			name: "Two HTTP Routes on same gateway",
 			httpRoutes: []*gwv1.HTTPRoute{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -270,12 +270,12 @@ func TestAgwRouteCollection(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					parent: parentKey{
+					Parent: ParentKey{
 						Kind:      wellknown.GatewayGVK,
 						Name:      "test-gateway",
 						Namespace: "default",
 					},
-					parentInfo: parentInfo{
+					ParentInfo: ParentInfo{
 						InternalName: "default/test-gateway",
 						Protocol:     gwv1.HTTPProtocolType,
 						Port:         80,
@@ -448,12 +448,12 @@ func TestAgwRouteCollection(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					parent: parentKey{
+					Parent: ParentKey{
 						Kind:      wellknown.GatewayGVK,
 						Name:      "test-gateway",
 						Namespace: "default",
 					},
-					parentInfo: parentInfo{
+					ParentInfo: ParentInfo{
 						InternalName: "default/test-gateway",
 						Protocol:     gwv1.HTTPProtocolType,
 						Port:         80,
@@ -470,7 +470,7 @@ func TestAgwRouteCollection(t *testing.T) {
 			},
 			refGrants:     []ReferenceGrant{},
 			expectedCount: 2,
-			expectedRoutes: []*api.Route{ // TODO: consistent ordering of routes?
+			expectedRoutes: []*api.Route{ // TODO: consistent ordering of Routes?
 				{
 					Key:       "default/multi-rule-route.0.0.http",
 					RouteName: "default/multi-rule-route",
@@ -593,12 +593,12 @@ func TestAgwRouteCollection(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					parent: parentKey{
+					Parent: ParentKey{
 						Kind:      wellknown.GatewayGVK,
 						Name:      "test-gateway",
 						Namespace: "default",
 					},
-					parentInfo: parentInfo{
+					ParentInfo: ParentInfo{
 						InternalName: "default/test-gateway",
 						Protocol:     gwv1.HTTPProtocolType,
 						Port:         80,
@@ -721,12 +721,12 @@ func TestAgwRouteCollection(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					parent: parentKey{
+					Parent: ParentKey{
 						Kind:      wellknown.GatewayGVK,
 						Name:      "test-gateway",
 						Namespace: "default",
 					},
-					parentInfo: parentInfo{
+					ParentInfo: ParentInfo{
 						InternalName: "default/test-gateway",
 						Protocol:     gwv1.HTTPProtocolType,
 						Port:         80,
@@ -779,7 +779,7 @@ func TestAgwRouteCollection(t *testing.T) {
 			},
 		},
 		{
-			name:           "No HTTP routes",
+			name:           "No HTTP Routes",
 			httpRoutes:     []*gwv1.HTTPRoute{},
 			services:       []*corev1.Service{},
 			namespaces:     []*corev1.Namespace{},
@@ -858,7 +858,7 @@ func TestAgwRouteCollection(t *testing.T) {
 			// Get results
 			results := agwRoutes.List()
 
-			// Create a map of actual routes by key for easy lookup
+			// Create a map of actual Routes by key for easy lookup
 			actualRoutes := make(map[string]*api.Route)
 			for _, result := range results {
 				require.NotNil(t, result.Resources, "Resource should not be nil")
@@ -869,7 +869,7 @@ func TestAgwRouteCollection(t *testing.T) {
 				}
 			}
 			// Verify expected count
-			assert.Equal(t, tc.expectedCount, len(actualRoutes), "Expected %d routes but got %d", tc.expectedCount, len(actualRoutes))
+			assert.Equal(t, tc.expectedCount, len(actualRoutes), "Expected %d Routes but got %d", tc.expectedCount, len(actualRoutes))
 
 			// Verify each expected route exists in the actual results
 			for _, expectedRoute := range tc.expectedRoutes {
@@ -1023,12 +1023,12 @@ func TestAgwRouteCollectionGRPC(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					parent: parentKey{
+					Parent: ParentKey{
 						Kind:      wellknown.GatewayGVK,
 						Name:      "test-gateway",
 						Namespace: "default",
 					},
-					parentInfo: parentInfo{
+					ParentInfo: ParentInfo{
 						InternalName: "default/test-gateway",
 						Protocol:     gwv1.HTTPProtocolType,
 						Port:         9090,
@@ -1177,12 +1177,12 @@ func TestAgwRouteCollectionGRPC(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					parent: parentKey{
+					Parent: ParentKey{
 						Kind:      wellknown.GatewayGVK,
 						Name:      "test-gateway",
 						Namespace: "default",
 					},
-					parentInfo: parentInfo{
+					ParentInfo: ParentInfo{
 						InternalName: "default/test-gateway",
 						Protocol:     gwv1.HTTPProtocolType,
 						Port:         9090,
@@ -1329,12 +1329,12 @@ func TestAgwRouteCollectionGRPC(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					parent: parentKey{
+					Parent: ParentKey{
 						Kind:      wellknown.GatewayGVK,
 						Name:      "test-gateway",
 						Namespace: "default",
 					},
-					parentInfo: parentInfo{
+					ParentInfo: ParentInfo{
 						InternalName: "default/test-gateway",
 						Protocol:     gwv1.HTTPProtocolType,
 						Port:         9090,
@@ -1387,7 +1387,7 @@ func TestAgwRouteCollectionGRPC(t *testing.T) {
 			},
 		},
 		{
-			name:           "No gRPC routes",
+			name:           "No gRPC Routes",
 			grpcRoutes:     []*gwv1.GRPCRoute{},
 			services:       []*corev1.Service{},
 			namespaces:     []*corev1.Namespace{},
@@ -1466,7 +1466,7 @@ func TestAgwRouteCollectionGRPC(t *testing.T) {
 			// Get results
 			results := agwRoutes.List()
 
-			// Create a map of actual routes by key for easy lookup
+			// Create a map of actual Routes by key for easy lookup
 			actualRoutes := make(map[string]*api.Route)
 			for _, result := range results {
 				require.NotNil(t, result.Resources, "Resource should not be nil")
@@ -1477,7 +1477,7 @@ func TestAgwRouteCollectionGRPC(t *testing.T) {
 				}
 			}
 			// Verify expected count
-			assert.Equal(t, tc.expectedCount, len(actualRoutes), "Expected %d routes but got %d", tc.expectedCount, len(actualRoutes))
+			assert.Equal(t, tc.expectedCount, len(actualRoutes), "Expected %d Routes but got %d", tc.expectedCount, len(actualRoutes))
 
 			// Verify each expected route exists in the actual results
 			for _, expectedRoute := range tc.expectedRoutes {
@@ -1822,12 +1822,12 @@ func TestAgwRouteCollectionWithFilters(t *testing.T) {
 						Namespace: "default",
 					},
 				},
-				parent: parentKey{
+				Parent: ParentKey{
 					Kind:      wellknown.GatewayGVK,
 					Name:      "test-gateway",
 					Namespace: "default",
 				},
-				parentInfo: parentInfo{
+				ParentInfo: ParentInfo{
 					InternalName: "default/test-gateway",
 					Protocol:     gwv1.HTTPProtocolType,
 					Port:         80,

@@ -1,4 +1,4 @@
-package agentgatewaysyncer
+package translator
 
 import (
 	"istio.io/istio/pilot/pkg/model/kstatus"
@@ -10,6 +10,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 )
 
+// ParentErrorReason is the error string for a ParentError (reason parent could not be referenced)
 type ParentErrorReason string
 
 const (
@@ -20,6 +21,7 @@ const (
 	ParentNoError                = ParentErrorReason("")
 )
 
+// ConfigErrorReason is the error string for a ConfigError (reason configuration is invalid)
 type ConfigErrorReason = string
 
 const (
@@ -122,7 +124,7 @@ func reportListenerCondition(index int, l gwv1.Listener, obj *gwv1.Gateway,
 		gs.Listeners = append(gs.Listeners, gwv1.ListenerStatus{})
 	}
 	cond := gs.Listeners[index].Conditions
-	supported, valid := generateSupportedKinds(l)
+	supported, valid := GenerateSupportedKinds(l)
 	if !valid {
 		conditions[string(gwv1.ListenerConditionResolvedRefs)] = &condition{
 			reason:  string(gwv1.ListenerReasonInvalidRouteKinds),
@@ -138,7 +140,8 @@ func reportListenerCondition(index int, l gwv1.Listener, obj *gwv1.Gateway,
 	}
 }
 
-func generateSupportedKinds(l gwv1.Listener) ([]gwv1.RouteGroupKind, bool) {
+// GenerateSupportedKinds returns the supported kinds for the listener.
+func GenerateSupportedKinds(l gwv1.Listener) ([]gwv1.RouteGroupKind, bool) {
 	var supported []gwv1.RouteGroupKind
 	switch l.Protocol {
 	case gwv1.HTTPProtocolType, gwv1.HTTPSProtocolType:

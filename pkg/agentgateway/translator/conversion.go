@@ -1,4 +1,4 @@
-package agentgatewaysyncer
+package translator
 
 import (
 	"crypto/tls"
@@ -46,7 +46,8 @@ const (
 	gatewayTLSTerminateModeKey = "gateway.agentgateway.io/tls-terminate-mode"
 )
 
-func convertHTTPRouteToAgw(ctx RouteContext, r gwv1.HTTPRouteRule,
+// ConvertHTTPRouteToAgw converts a HTTPRouteRule to an agentgateway HTTPRoute
+func ConvertHTTPRouteToAgw(ctx RouteContext, r gwv1.HTTPRouteRule,
 	obj *gwv1.HTTPRoute, pos int, matchPos int,
 ) (*api.Route, *reporter.RouteCondition) {
 	routeRuleKey := strconv.Itoa(pos) + "." + strconv.Itoa(matchPos)
@@ -75,10 +76,10 @@ func convertHTTPRouteToAgw(ctx RouteContext, r gwv1.HTTPRouteRule,
 		}
 	}
 
-	filters, filterError := buildAgwFilters(ctx, obj.Namespace, r.Filters)
+	filters, filterError := BuildAgwFilters(ctx, obj.Namespace, r.Filters)
 	res.Filters = filters
 
-	if err := applyTimeouts(&r, res); err != nil {
+	if err := ApplyTimeouts(&r, res); err != nil {
 		return nil, &reporter.RouteCondition{
 			Type:    gwv1.RouteConditionAccepted,
 			Status:  metav1.ConditionFalse,
@@ -86,7 +87,7 @@ func convertHTTPRouteToAgw(ctx RouteContext, r gwv1.HTTPRouteRule,
 			Message: fmt.Sprintf("failed to apply builtin route timeout: %v", err),
 		}
 	}
-	if err := applyRetries(&r, res); err != nil {
+	if err := ApplyRetries(&r, res); err != nil {
 		return nil, &reporter.RouteCondition{
 			Type:    gwv1.RouteConditionAccepted,
 			Status:  metav1.ConditionFalse,
@@ -125,24 +126,24 @@ func convertHTTPRouteToAgw(ctx RouteContext, r gwv1.HTTPRouteRule,
 // Helper function to process route matches
 func processRouteMatches(r *gwv1.HTTPRouteRule, res *api.Route) error {
 	for _, match := range r.Matches {
-		path, err := createAgwPathMatch(match)
+		path, err := CreateAgwPathMatch(match)
 		if err != nil {
-			return fmt.Errorf("path match error: %v", err)
+			return fmt.Errorf("path match Error: %v", err)
 		}
 
-		headers, err := createAgwHeadersMatch(match)
+		headers, err := CreateAgwHeadersMatch(match)
 		if err != nil {
-			return fmt.Errorf("headers match error: %v", err)
+			return fmt.Errorf("headers match Error: %v", err)
 		}
 
-		method, err := createAgwMethodMatch(match)
+		method, err := CreateAgwMethodMatch(match)
 		if err != nil {
-			return fmt.Errorf("method match error: %v", err)
+			return fmt.Errorf("method match Error: %v", err)
 		}
 
-		query, err := createAgwQueryMatch(match)
+		query, err := CreateAgwQueryMatch(match)
 		if err != nil {
-			return fmt.Errorf("query match error: %v", err)
+			return fmt.Errorf("query match Error: %v", err)
 		}
 
 		res.Matches = append(res.GetMatches(), &api.RouteMatch{
@@ -224,7 +225,8 @@ func isFilterErrorCritical(filterError *reporter.RouteCondition) bool {
 	return false
 }
 
-func convertTCPRouteToAgw(ctx RouteContext, r gwv1alpha2.TCPRouteRule,
+// ConvertTCPRouteToAgw converts a TCPRouteRule to an agentgateway TCPRoute
+func ConvertTCPRouteToAgw(ctx RouteContext, r gwv1alpha2.TCPRouteRule,
 	obj *gwv1alpha2.TCPRoute, pos int,
 ) (*api.TCPRoute, *reporter.RouteCondition) {
 	routeRuleKey := strconv.Itoa(pos)
@@ -254,7 +256,8 @@ func convertTCPRouteToAgw(ctx RouteContext, r gwv1alpha2.TCPRouteRule,
 	return res, backendErr
 }
 
-func convertGRPCRouteToAgw(ctx RouteContext, r gwv1.GRPCRouteRule,
+// ConvertGRPCRouteToAgw converts a GRPCRouteRule to an agentgateway HTTPRoute
+func ConvertGRPCRouteToAgw(ctx RouteContext, r gwv1.GRPCRouteRule,
 	obj *gwv1.GRPCRoute, pos int,
 ) (*api.Route, *reporter.RouteCondition) {
 	routeRuleKey := strconv.Itoa(pos)
@@ -275,7 +278,7 @@ func convertGRPCRouteToAgw(ctx RouteContext, r gwv1.GRPCRouteRule,
 
 	// Convert GRPC matches to Agw format
 	for _, match := range r.Matches {
-		headers, err := createAgwGRPCHeadersMatch(match)
+		headers, err := CreateAgwGRPCHeadersMatch(match)
 		if err != nil {
 			logger.Error("failed to translate grpc header match", "err", err, "route_name", obj.Name, "route_ns", obj.Namespace)
 			return nil, err
@@ -303,7 +306,7 @@ func convertGRPCRouteToAgw(ctx RouteContext, r gwv1.GRPCRouteRule,
 		})
 	}
 
-	filters, err := buildAgwGRPCFilters(ctx, obj.Namespace, r.Filters)
+	filters, err := BuildAgwGRPCFilters(ctx, obj.Namespace, r.Filters)
 	if err != nil {
 		logger.Error("failed to translate grpc filter", "err", err, "route_name", obj.Name, "route_ns", obj.Namespace)
 		return nil, err
@@ -322,7 +325,8 @@ func convertGRPCRouteToAgw(ctx RouteContext, r gwv1.GRPCRouteRule,
 	return res, backendErr
 }
 
-func convertTLSRouteToAgw(ctx RouteContext, r gwv1alpha2.TLSRouteRule,
+// ConvertTLSRouteToAgw converts a TLSRouteRule to an agentgateway TCPRoute
+func ConvertTLSRouteToAgw(ctx RouteContext, r gwv1alpha2.TLSRouteRule,
 	obj *gwv1alpha2.TLSRoute, pos int,
 ) (*api.TCPRoute, *reporter.RouteCondition) {
 	routeRuleKey := strconv.Itoa(pos)
@@ -349,7 +353,7 @@ func convertTLSRouteToAgw(ctx RouteContext, r gwv1alpha2.TLSRouteRule,
 	}
 	res.Backends = route
 
-	// TLS routes have hostnames in the spec (unlike TCP routes)
+	// TLS Routes have hostnames in the spec (unlike TCP Routes)
 	res.Hostnames = slices.Map(obj.Spec.Hostnames, func(e gwv1.Hostname) string {
 		return string(e)
 	})
@@ -371,7 +375,7 @@ func buildAgwTCPDestination(
 	for _, fwd := range forwardTo {
 		dst, err := buildAgwDestination(ctx, gwv1.HTTPBackendRef{
 			BackendRef: fwd,
-			Filters:    nil, // TCP routes don't have per-backend filters?
+			Filters:    nil, // TCP Routes don't have per-backend filters?
 		}, ns, wellknown.TCPRouteGVK, ctx.Backends)
 		if err != nil {
 			logger.Error("error building agent gateway destination", "error", err)
@@ -401,7 +405,7 @@ func buildAgwTLSDestination(
 	for _, fwd := range forwardTo {
 		dst, err := buildAgwDestination(ctx, gwv1.HTTPBackendRef{
 			BackendRef: fwd,
-			Filters:    nil, // TLS routes don't have per-backend filters
+			Filters:    nil, // TLS Routes don't have per-backend filters
 		}, ns, wellknown.TLSRouteGVK, ctx.Backends)
 		if err != nil {
 			logger.Error("error building agent gateway destination", "error", err)
@@ -422,7 +426,8 @@ func terminalFilterCombinationError(existingFilter, newFilter string) string {
 	return fmt.Sprintf("Cannot combine multiple terminal filters: %s and %s are mutually exclusive. Only one terminal filter is allowed per route rule.", existingFilter, newFilter)
 }
 
-func buildAgwFilters(
+// BuildAgwFilters builds a list of agentgateway filters from a list of k8s gateway api HTTPRoute filters
+func BuildAgwFilters(
 	ctx RouteContext,
 	ns string,
 	inputFilters []gwv1.HTTPRouteFilter,
@@ -435,13 +440,13 @@ func buildAgwFilters(
 	for _, filter := range inputFilters {
 		switch filter.Type {
 		case gwv1.HTTPRouteFilterRequestHeaderModifier:
-			h := createAgwHeadersFilter(filter.RequestHeaderModifier)
+			h := CreateAgwHeadersFilter(filter.RequestHeaderModifier)
 			if h == nil {
 				continue
 			}
 			filters = append(filters, h)
 		case gwv1.HTTPRouteFilterResponseHeaderModifier:
-			h := createAgwResponseHeadersFilter(filter.ResponseHeaderModifier)
+			h := CreateAgwResponseHeadersFilter(filter.ResponseHeaderModifier)
 			if h == nil {
 				continue
 			}
@@ -456,7 +461,7 @@ func buildAgwFilters(
 				}
 				continue
 			}
-			h := createAgwRedirectFilter(filter.RequestRedirect)
+			h := CreateAgwRedirectFilter(filter.RequestRedirect)
 			if h == nil {
 				continue
 			}
@@ -464,7 +469,7 @@ func buildAgwFilters(
 			hasTerminalFilter = true
 			terminalFilterType = "RequestRedirect"
 		case gwv1.HTTPRouteFilterRequestMirror:
-			h, err := createAgwMirrorFilter(ctx, filter.RequestMirror, ns, wellknown.HTTPRouteGVK)
+			h, err := CreateAgwMirrorFilter(ctx, filter.RequestMirror, ns, wellknown.HTTPRouteGVK)
 			if err != nil {
 				if filterError == nil {
 					filterError = err
@@ -473,7 +478,7 @@ func buildAgwFilters(
 				filters = append(filters, h)
 			}
 		case gwv1.HTTPRouteFilterURLRewrite:
-			h := createAgwRewriteFilter(filter.URLRewrite)
+			h := CreateAgwRewriteFilter(filter.URLRewrite)
 			if h == nil {
 				continue
 			}
@@ -561,7 +566,7 @@ func buildAgwHTTPDestination(
 			}
 		}
 		if dst != nil {
-			filters, err := buildAgwFilters(ctx, ns, fwd.Filters)
+			filters, err := BuildAgwFilters(ctx, ns, fwd.Filters)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -700,7 +705,8 @@ func buildAgwDestination(
 	return rb, invalidBackendErr
 }
 
-func parentMeta(obj controllers.Object, sectionName *gwv1.SectionName) map[string]string {
+// ParentMeta generates a map of metadata for a parent resource, including its name and optional section-specific details.
+func ParentMeta(obj controllers.Object, sectionName *gwv1.SectionName) map[string]string {
 	kind := obj.GetObjectKind().GroupVersionKind().Kind
 	name := fmt.Sprintf("%s/%s.%s", kind, obj.GetName(), obj.GetNamespace())
 	if sectionName != nil {
@@ -740,12 +746,13 @@ func normalizeReference(group *gwv1.Group, kind *gwv1.Kind, defaultGVK schema.Gr
 	return result
 }
 
-func toInternalParentReference(p gwv1.ParentReference, localNamespace string) (parentKey, error) {
+// ToInternalParentReference converts a gwv1.ParentReference to a ParentKey.
+func ToInternalParentReference(p gwv1.ParentReference, localNamespace string) (ParentKey, error) {
 	ref := normalizeReference(p.Group, p.Kind, wellknown.GatewayGVK)
 	if !allowedParentReferences.Contains(wellknown.GatewayGVK) {
-		return parentKey{}, fmt.Errorf("unsupported parent: %v/%v", p.Group, p.Kind)
+		return ParentKey{}, fmt.Errorf("unsupported Parent: %v/%v", p.Group, p.Kind)
 	}
-	return parentKey{
+	return ParentKey{
 		Kind: ref,
 		Name: string(p.Name),
 		// Unset namespace means "same namespace"
@@ -753,11 +760,14 @@ func toInternalParentReference(p gwv1.ParentReference, localNamespace string) (p
 	}, nil
 }
 
-func referenceAllowed(
+// ReferenceAllowed validates if a route can reference a specified parent based on rules like section, port, and hostnames.
+// Returns a *ParentError if the reference violates any constraints or is disallowed.
+// Returns nil if the reference is valid and permitted for the given route and ParentInfo.
+func ReferenceAllowed(
 	ctx RouteContext,
-	parent *parentInfo,
+	parent *ParentInfo,
 	routeKind schema.GroupVersionKind,
-	parentRef parentReference,
+	parentRef ParentReference,
 	hostnames []gwv1.Hostname,
 	localNamespace string,
 ) *ParentError {
@@ -865,23 +875,23 @@ func referenceAllowed(
 	return nil
 }
 
-func extractParentReferenceInfo(ctx RouteContext, parents RouteParents, obj controllers.Object) []routeParentReference {
+func extractParentReferenceInfo(ctx RouteContext, parents RouteParents, obj controllers.Object) []RouteParentReference {
 	routeRefs, hostnames, kind := GetCommonRouteInfo(obj)
 	localNamespace := obj.GetNamespace()
-	var parentRefs []routeParentReference
+	var parentRefs []RouteParentReference
 	for _, ref := range routeRefs {
-		ir, err := toInternalParentReference(ref, localNamespace)
+		ir, err := ToInternalParentReference(ref, localNamespace)
 		if err != nil {
 			continue
 		}
-		pk := parentReference{
-			parentKey:   ir,
+		pk := ParentReference{
+			ParentKey:   ir,
 			SectionName: ptr.OrEmpty(ref.SectionName),
 			Port:        ptr.OrEmpty(ref.Port),
 		}
 		gk := ir
-		currentParents := parents.fetch(ctx.Krt, gk)
-		appendParent := func(pr *parentInfo, pk parentReference) {
+		currentParents := parents.Fetch(ctx.Krt, gk)
+		appendParent := func(pr *ParentInfo, pk ParentReference) {
 			bannedHostnames := sets.New[string]()
 			for _, gw := range currentParents {
 				if gw == pr {
@@ -895,8 +905,8 @@ func extractParentReferenceInfo(ctx RouteContext, parents RouteParents, obj cont
 				}
 				bannedHostnames.Insert(gw.OriginalHostname)
 			}
-			deniedReason := referenceAllowed(ctx, pr, kind, pk, hostnames, localNamespace)
-			rpi := routeParentReference{
+			deniedReason := ReferenceAllowed(ctx, pr, kind, pk, hostnames, localNamespace)
+			rpi := RouteParentReference{
 				InternalName:      pr.InternalName,
 				InternalKind:      ir.Kind,
 				Hostname:          pr.OriginalHostname,
@@ -914,8 +924,8 @@ func extractParentReferenceInfo(ctx RouteContext, parents RouteParents, obj cont
 		}
 	}
 	// Ensure stable order
-	slices.SortBy(parentRefs, func(a routeParentReference) string {
-		return parentRefString(a.OriginalReference)
+	slices.SortBy(parentRefs, func(a RouteParentReference) string {
+		return ParentRefString(a.OriginalReference)
 	})
 	return parentRefs
 }
@@ -927,9 +937,9 @@ func isInvalidBackend(err *reporter.RouteCondition) bool {
 		err.Reason == gwv1.RouteReasonInvalidKind
 }
 
-// parentKey holds info about a parentRef (eg route binding to a Gateway). This is a mirror of
+// ParentKey holds info about a parentRef (eg route binding to a Gateway). This is a mirror of
 // gwv1.ParentReference in a form that can be stored in a map
-type parentKey struct {
+type ParentKey struct {
 	Kind schema.GroupVersionKind
 	// Name is the original name of the resource (eg Kubernetes Gateway name)
 	Name string
@@ -937,29 +947,30 @@ type parentKey struct {
 	Namespace string
 }
 
-func (p parentKey) String() string {
+func (p ParentKey) String() string {
 	return p.Kind.String() + "/" + p.Namespace + "/" + p.Name
 }
 
-type parentReference struct {
-	parentKey
+// ParentReference holds the parent key, section name and port for a parent reference.
+type ParentReference struct {
+	ParentKey
 
 	SectionName gwv1.SectionName
 	Port        gwv1.PortNumber
 }
 
-func (p parentReference) String() string {
-	return p.parentKey.String() + "/" + string(p.SectionName) + "/" + fmt.Sprint(p.Port)
+func (p ParentReference) String() string {
+	return p.ParentKey.String() + "/" + string(p.SectionName) + "/" + fmt.Sprint(p.Port)
 }
 
-// parentInfo holds info about a "parent" - something that can be referenced as a ParentRef in the API.
+// ParentInfo holds info about a "Parent" - something that can be referenced as a ParentRef in the API.
 // Today, this is just Gateway
-type parentInfo struct {
+type ParentInfo struct {
 	// InternalName refers to the internal name we can reference it by. For example "my-ns/my-gateway"
 	InternalName string
-	// AllowedKinds indicates which kinds can be admitted by this parent
+	// AllowedKinds indicates which kinds can be admitted by this Parent
 	AllowedKinds []gwv1.RouteGroupKind
-	// Hostnames is the hostnames that must be match to reference to the parent. For gateway this is listener hostname
+	// Hostnames is the hostnames that must be match to reference to the Parent. For gateway this is listener hostname
 	// Format is ns/hostname
 	Hostnames []string
 	// OriginalHostname is the unprocessed form of Hostnames; how it appeared in users' config
@@ -970,26 +981,27 @@ type parentInfo struct {
 	Protocol    gwv1.ProtocolType
 }
 
-// routeParentReference holds information about a route's parent reference
-type routeParentReference struct {
+// RouteParentReference holds information about a route's parent reference
+type RouteParentReference struct {
 	// InternalName refers to the internal name of the parent we can reference it by. For example "my-ns/my-gateway"
 	InternalName string
-	// InternalKind is the Group/Kind of the parent
+	// InternalKind is the Group/Kind of the Parent
 	InternalKind schema.GroupVersionKind
 	// DeniedReason, if present, indicates why the reference was not valid
 	DeniedReason *ParentError
 	// OriginalReference contains the original reference
 	OriginalReference gwv1.ParentReference
-	// Hostname is the hostname match of the parent, if any
+	// Hostname is the hostname match of the Parent, if any
 	Hostname        string
 	BannedHostnames sets.Set[string]
-	ParentKey       parentKey
+	ParentKey       ParentKey
 	ParentSection   gwv1.SectionName
 	Accepted        bool
 }
 
-func filteredReferences(parents []routeParentReference) []routeParentReference {
-	ret := make([]routeParentReference, 0, len(parents))
+// FilteredReferences filters out references that are not accepted by the Parent.
+func FilteredReferences(parents []RouteParentReference) []RouteParentReference {
+	ret := make([]RouteParentReference, 0, len(parents))
 	for _, p := range parents {
 		if p.DeniedReason != nil {
 			// We should filter this out
@@ -1041,7 +1053,7 @@ func IsManaged(gw *gwv1.GatewaySpec) bool {
 	return false
 }
 
-func extractGatewayServices(kgw *gwv1.Gateway) ([]string, *reporter.RouteCondition) {
+func ExtractGatewayServices(kgw *gwv1.Gateway) ([]string, *reporter.RouteCondition) {
 	if IsManaged(&kgw.Spec) {
 		return []string{kubeutils.ServiceFQDN(kgw.ObjectMeta)}, nil
 	}
@@ -1049,7 +1061,7 @@ func extractGatewayServices(kgw *gwv1.Gateway) ([]string, *reporter.RouteConditi
 	skippedAddresses := []string{}
 	for _, addr := range kgw.Spec.Addresses {
 		if addr.Type != nil && *addr.Type != gwv1.HostnameAddressType {
-			// We only support HostnameAddressType. Keep track of invalid ones so we can report in status.
+			// We only support HostnameAddressType. Keep track of invalid ones so we can Report in status.
 			skippedAddresses = append(skippedAddresses, addr.Value)
 			continue
 		}
@@ -1085,7 +1097,8 @@ func extractGatewayServices(kgw *gwv1.Gateway) ([]string, *reporter.RouteConditi
 	return gatewayServices, nil
 }
 
-func buildListener(
+// BuildListener translates a k8s Gateway to an internal listener representation.
+func BuildListener(
 	ctx krt.HandlerContext,
 	secrets krt.Collection[*corev1.Secret],
 	grants ReferenceGrants,
@@ -1294,7 +1307,8 @@ func objectReferenceString(ref gwv1.SecretObjectReference) string {
 		ptr.OrEmpty(ref.Namespace))
 }
 
-func parentRefString(ref gwv1.ParentReference) string {
+// ParentRefString returns a string representation of a ParentRef.
+func ParentRefString(ref gwv1.ParentReference) string {
 	return fmt.Sprintf("%s/%s/%s/%s/%d.%s",
 		ptr.OrEmpty(ref.Group),
 		ptr.OrEmpty(ref.Kind),
