@@ -183,41 +183,26 @@ func defaultWaypointGatewayParameters(envoyImageInfo *ImageInfo, omitDefaultSecu
 	return gwp
 }
 
-// getImageRepository returns the repository from ImageInfo if set, otherwise returns the fallback
-func getImageRepository(imageInfo *ImageInfo, fallback string) string {
-	if imageInfo != nil && imageInfo.Repository != "" {
-		return imageInfo.Repository
-	}
-	return fallback
-}
-
-// getImageRegistry returns the registry from ImageInfo if set, otherwise returns the fallback
-func getImageRegistry(imageInfo *ImageInfo, fallback string) string {
-	if imageInfo != nil && imageInfo.Registry != "" {
-		return imageInfo.Registry
-	}
-	return fallback
-}
-
-// getImageTag returns the tag from ImageInfo if set, otherwise returns the fallback
-func getImageTag(imageInfo *ImageInfo, fallback string) string {
-	if imageInfo != nil && imageInfo.Tag != "" {
-		return imageInfo.Tag
-	}
-	return fallback
-}
-
-// getImagePullPolicy returns the pull policy from ImageInfo if set, otherwise returns the fallback
-func getImagePullPolicy(imageInfo *ImageInfo, fallback string) string {
-	if imageInfo != nil && imageInfo.PullPolicy != "" {
-		return imageInfo.PullPolicy
-	}
-	return fallback
-}
 
 // defaultGatewayParameters returns an in-memory GatewayParameters with the default values
 // set for the gateway.
 func defaultGatewayParameters(envoyImageInfo *ImageInfo, agentgatewayImageInfo *ImageInfo, omitDefaultSecurityContext bool) *v1alpha1.GatewayParameters {
+	// Provide default ImageInfo when nil
+	if envoyImageInfo == nil {
+		envoyImageInfo = &ImageInfo{
+			Registry:   "ghcr.io/kgateway-dev",
+			Tag:        "latest",
+			PullPolicy: "IfNotPresent",
+		}
+	}
+	if agentgatewayImageInfo == nil {
+		agentgatewayImageInfo = &ImageInfo{
+			Registry:   AgentgatewayRegistry,
+			Repository: AgentgatewayImage,
+			Tag:        AgentgatewayDefaultTag,
+			PullPolicy: "IfNotPresent",
+		}
+	}
 	gwp := &v1alpha1.GatewayParameters{
 		Spec: v1alpha1.GatewayParametersSpec{
 			SelfManaged: nil,
@@ -264,10 +249,10 @@ func defaultGatewayParameters(envoyImageInfo *ImageInfo, agentgatewayImageInfo *
 						LogLevel: ptr.To("info"),
 					},
 					Image: &v1alpha1.Image{
-						Registry:   ptr.To(getImageRegistry(envoyImageInfo, "ghcr.io/kgateway-dev")),
-						Tag:        ptr.To(getImageTag(envoyImageInfo, "latest")),
+						Registry:   ptr.To(envoyImageInfo.Registry),
+						Tag:        ptr.To(envoyImageInfo.Tag),
 						Repository: ptr.To(EnvoyWrapperImage),
-						PullPolicy: (*corev1.PullPolicy)(ptr.To(getImagePullPolicy(envoyImageInfo, "IfNotPresent"))),
+						PullPolicy: (*corev1.PullPolicy)(ptr.To(envoyImageInfo.PullPolicy)),
 					},
 					SecurityContext: &corev1.SecurityContext{
 						AllowPrivilegeEscalation: ptr.To(false),
@@ -288,10 +273,10 @@ func defaultGatewayParameters(envoyImageInfo *ImageInfo, agentgatewayImageInfo *
 				},
 				SdsContainer: &v1alpha1.SdsContainer{
 					Image: &v1alpha1.Image{
-						Registry:   ptr.To(getImageRegistry(envoyImageInfo, "ghcr.io/kgateway-dev")),
-						Tag:        ptr.To(getImageTag(envoyImageInfo, "latest")),
+						Registry:   ptr.To(envoyImageInfo.Registry),
+						Tag:        ptr.To(envoyImageInfo.Tag),
 						Repository: ptr.To(SdsImage),
-						PullPolicy: (*corev1.PullPolicy)(ptr.To(getImagePullPolicy(envoyImageInfo, "IfNotPresent"))),
+						PullPolicy: (*corev1.PullPolicy)(ptr.To(envoyImageInfo.PullPolicy)),
 					},
 					Bootstrap: &v1alpha1.SdsBootstrap{
 						LogLevel: ptr.To("info"),
@@ -303,7 +288,7 @@ func defaultGatewayParameters(envoyImageInfo *ImageInfo, agentgatewayImageInfo *
 							Registry:   ptr.To("docker.io/istio"),
 							Repository: ptr.To("proxyv2"),
 							Tag:        ptr.To("1.22.0"),
-							PullPolicy: (*corev1.PullPolicy)(ptr.To(getImagePullPolicy(envoyImageInfo, "IfNotPresent"))),
+							PullPolicy: (*corev1.PullPolicy)(ptr.To(envoyImageInfo.PullPolicy)),
 						},
 						LogLevel:              ptr.To("warning"),
 						IstioDiscoveryAddress: ptr.To("istiod.istio-system.svc:15012"),
@@ -315,19 +300,19 @@ func defaultGatewayParameters(envoyImageInfo *ImageInfo, agentgatewayImageInfo *
 					Enabled: ptr.To(false),
 					Image: &v1alpha1.Image{
 						Repository: ptr.To(KgatewayAIContainerName),
-						Registry:   ptr.To(getImageRegistry(envoyImageInfo, "ghcr.io/kgateway-dev")),
-						Tag:        ptr.To(getImageTag(envoyImageInfo, "latest")),
-						PullPolicy: (*corev1.PullPolicy)(ptr.To(getImagePullPolicy(envoyImageInfo, "IfNotPresent"))),
+						Registry:   ptr.To(envoyImageInfo.Registry),
+						Tag:        ptr.To(envoyImageInfo.Tag),
+						PullPolicy: (*corev1.PullPolicy)(ptr.To(envoyImageInfo.PullPolicy)),
 					},
 				},
 				Agentgateway: &v1alpha1.Agentgateway{
 					Enabled:  ptr.To(false),
 					LogLevel: ptr.To("info"),
 					Image: &v1alpha1.Image{
-						Registry:   ptr.To(getImageRegistry(agentgatewayImageInfo, AgentgatewayRegistry)),
-						Tag:        ptr.To(getImageTag(agentgatewayImageInfo, AgentgatewayDefaultTag)),
-						Repository: ptr.To(getImageRepository(agentgatewayImageInfo, AgentgatewayImage)),
-						PullPolicy: (*corev1.PullPolicy)(ptr.To(getImagePullPolicy(agentgatewayImageInfo, "IfNotPresent"))),
+						Registry:   ptr.To(agentgatewayImageInfo.Registry),
+						Tag:        ptr.To(agentgatewayImageInfo.Tag),
+						Repository: ptr.To(agentgatewayImageInfo.Repository),
+						PullPolicy: (*corev1.PullPolicy)(ptr.To(agentgatewayImageInfo.PullPolicy)),
 					},
 					SecurityContext: &corev1.SecurityContext{
 						AllowPrivilegeEscalation: ptr.To(false),
