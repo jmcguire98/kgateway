@@ -42,6 +42,7 @@ type InferenceExtInfo struct{}
 
 type ImageInfo struct {
 	Registry   string
+	Repository string
 	Tag        string
 	PullPolicy string
 }

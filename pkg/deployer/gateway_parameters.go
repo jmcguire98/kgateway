@@ -182,6 +182,14 @@ func defaultWaypointGatewayParameters(imageInfo *ImageInfo, omitDefaultSecurityC
 	return gwp
 }
 
+// getImageRepository returns the repository from ImageInfo if set, otherwise returns the fallback
+func getImageRepository(imageInfo *ImageInfo, fallback string) string {
+	if imageInfo != nil && imageInfo.Repository != "" {
+		return imageInfo.Repository
+	}
+	return fallback
+}
+
 // defaultGatewayParameters returns an in-memory GatewayParameters with the default values
 // set for the gateway.
 func defaultGatewayParameters(imageInfo *ImageInfo, omitDefaultSecurityContext bool) *v1alpha1.GatewayParameters {
@@ -291,9 +299,9 @@ func defaultGatewayParameters(imageInfo *ImageInfo, omitDefaultSecurityContext b
 					Enabled:  ptr.To(false),
 					LogLevel: ptr.To("info"),
 					Image: &v1alpha1.Image{
-						Registry:   ptr.To(AgentgatewayRegistry),
-						Tag:        ptr.To(AgentgatewayDefaultTag),
-						Repository: ptr.To(AgentgatewayImage),
+						Registry:   ptr.To(imageInfo.Registry),
+						Tag:        ptr.To(imageInfo.Tag),
+						Repository: ptr.To(getImageRepository(imageInfo, AgentgatewayImage)),
 						PullPolicy: (*corev1.PullPolicy)(ptr.To(imageInfo.PullPolicy)),
 					},
 					SecurityContext: &corev1.SecurityContext{
