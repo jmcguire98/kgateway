@@ -216,9 +216,13 @@ func createManager(
 		ControllerName:    gatewayControllerName,
 		AgwControllerName: agwControllerName,
 		AutoProvision:     true,
-		ImageInfo: &deployer.ImageInfo{
+		EnvoyImageInfo: &deployer.ImageInfo{
 			Registry: "ghcr.io/kgateway-dev",
 			Tag:      "latest",
+		},
+		AgentgatewayImageInfo: &deployer.ImageInfo{
+			Registry: deployer.AgentgatewayRegistry,
+			Tag:      deployer.AgentgatewayDefaultTag,
 		},
 		DiscoveryNamespaceFilter: fakeDiscoveryNamespaceFilter{},
 		CommonCollections:        newCommonCols(ctx, kubeClient),

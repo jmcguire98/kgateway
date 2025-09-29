@@ -306,9 +306,14 @@ func (c *ControllerBuilder) Build(ctx context.Context) error {
 			AgwXdsPort: agwXdsPort,
 		},
 		IstioAutoMtlsEnabled: istioAutoMtlsEnabled,
-		ImageInfo: &deployer.ImageInfo{
+		EnvoyImageInfo: &deployer.ImageInfo{
 			Registry:   globalSettings.DefaultImageRegistry,
 			Tag:        globalSettings.DefaultImageTag,
+			PullPolicy: globalSettings.DefaultImagePullPolicy,
+		},
+		AgentgatewayImageInfo: &deployer.ImageInfo{
+			Registry:   deployer.AgentgatewayRegistry,
+			Tag:        deployer.AgentgatewayDefaultTag,
 			PullPolicy: globalSettings.DefaultImagePullPolicy,
 		},
 		DiscoveryNamespaceFilter: c.cfg.Client.ObjectFilter(),

@@ -459,9 +459,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -545,9 +549,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -624,9 +632,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -725,9 +737,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -812,9 +828,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -879,9 +899,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -979,9 +1003,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1051,9 +1079,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1143,9 +1175,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1171,9 +1207,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1245,9 +1285,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 			})
 			chart, err := deployerinternal.LoadGatewayChart()
@@ -1293,9 +1337,13 @@ var _ = Describe("Deployer", func() {
 					XdsPort:    1234,
 					AgwXdsPort: 5678,
 				},
-				ImageInfo: &deployer.ImageInfo{
+				EnvoyImageInfo: &deployer.ImageInfo{
 					Registry: "foo",
 					Tag:      "bar",
+				},
+				AgentgatewayImageInfo: &deployer.ImageInfo{
+					Registry: deployer.AgentgatewayRegistry,
+					Tag:      deployer.AgentgatewayDefaultTag,
 				},
 			})
 			chart, err := deployerinternal.LoadGatewayChart()
@@ -1358,9 +1406,13 @@ var _ = Describe("Deployer", func() {
 						XdsPort:    1234,
 						AgwXdsPort: 5678,
 					},
-					ImageInfo: &deployer.ImageInfo{
+					EnvoyImageInfo: &deployer.ImageInfo{
 						Registry: registry,
 						Tag:      tag,
+					},
+					AgentgatewayImageInfo: &deployer.ImageInfo{
+						Registry: deployer.AgentgatewayRegistry,
+						Tag:      deployer.AgentgatewayDefaultTag,
 					},
 				})
 				chart, err := deployerinternal.LoadGatewayChart()
@@ -1453,9 +1505,13 @@ var _ = Describe("Deployer", func() {
 						XdsPort:    1234,
 						AgwXdsPort: 5678,
 					},
-					ImageInfo: &deployer.ImageInfo{
+					EnvoyImageInfo: &deployer.ImageInfo{
 						Registry: registry,
 						Tag:      tag,
+					},
+					AgentgatewayImageInfo: &deployer.ImageInfo{
+						Registry: deployer.AgentgatewayRegistry,
+						Tag:      deployer.AgentgatewayDefaultTag,
 					},
 				})
 				chart, err := deployerinternal.LoadGatewayChart()
@@ -1556,9 +1612,13 @@ var _ = Describe("Deployer", func() {
 						XdsPort:    1234,
 						AgwXdsPort: 5678,
 					},
-					ImageInfo: &deployer.ImageInfo{
+					EnvoyImageInfo: &deployer.ImageInfo{
 						Registry: registry,
 						Tag:      tag,
+					},
+					AgentgatewayImageInfo: &deployer.ImageInfo{
+						Registry: deployer.AgentgatewayRegistry,
+						Tag:      deployer.AgentgatewayDefaultTag,
 					},
 				})
 				chart, err := deployerinternal.LoadGatewayChart()
@@ -1939,7 +1999,7 @@ var _ = Describe("Deployer", func() {
 					ControlPlane: deployer.ControlPlaneInfo{
 						XdsHost: "something.cluster.local", XdsPort: 1234, AgwXdsPort: 5678,
 					},
-					ImageInfo: &deployer.ImageInfo{
+					EnvoyImageInfo: &deployer.ImageInfo{
 						Registry: "foo",
 						Tag:      "bar",
 					},
@@ -3010,7 +3070,7 @@ var _ = Describe("Deployer", func() {
 					ControlPlane: deployer.ControlPlaneInfo{
 						XdsHost: "something.cluster.local", XdsPort: 1234, AgwXdsPort: 5678,
 					},
-					ImageInfo: &deployer.ImageInfo{
+					EnvoyImageInfo: &deployer.ImageInfo{
 						Registry: "foo",
 						Tag:      "bar",
 					},

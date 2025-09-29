@@ -439,9 +439,13 @@ func defaultInputs(t *testing.T, objs ...client.Object) *deployer.Inputs {
 			XdsPort:    1234,
 			AgwXdsPort: 5678,
 		},
-		ImageInfo: &deployer.ImageInfo{
+		EnvoyImageInfo: &deployer.ImageInfo{
 			Registry: "foo",
 			Tag:      "bar",
+		},
+		AgentgatewayImageInfo: &deployer.ImageInfo{
+			Registry: deployer.AgentgatewayRegistry,
+			Tag:      deployer.AgentgatewayDefaultTag,
 		},
 		GatewayClassName:         wellknown.DefaultGatewayClassName,
 		WaypointGatewayClassName: wellknown.DefaultWaypointClassName,

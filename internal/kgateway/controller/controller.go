@@ -60,8 +60,10 @@ type GatewayConfig struct {
 	// IstioAutoMtlsEnabled enables istio auto mtls mode for the controller,
 	// resulting in the deployer to enable istio and sds sidecars on the deployed proxies.
 	IstioAutoMtlsEnabled bool
-	// ImageInfo sets the default image information the deployer will use.
-	ImageInfo *deployer.ImageInfo
+	// EnvoyImageInfo sets the default image information for envoy components.
+	EnvoyImageInfo *deployer.ImageInfo
+	// AgentgatewayImageInfo sets the default image information for agentgateway components.
+	AgentgatewayImageInfo *deployer.ImageInfo
 	// DiscoveryNamespaceFilter filters namespaced objects based on the discovery namespace filter.
 	DiscoveryNamespaceFilter kubetypes.DynamicObjectFilter
 	// CommonCollections used to fetch ir.Gateways for the deployer to generate the ports for the proxy service
@@ -190,7 +192,8 @@ func (c *controllerBuilder) watchGw(ctx context.Context) error {
 		Dev:                      c.cfg.Dev,
 		IstioAutoMtlsEnabled:     c.cfg.IstioAutoMtlsEnabled,
 		ControlPlane:             c.cfg.ControlPlane,
-		ImageInfo:                c.cfg.ImageInfo,
+		EnvoyImageInfo:           c.cfg.EnvoyImageInfo,
+		AgentgatewayImageInfo:    c.cfg.AgentgatewayImageInfo,
 		CommonCollections:        c.cfg.CommonCollections,
 		GatewayClassName:         c.cfg.GatewayClassName,
 		WaypointGatewayClassName: c.cfg.WaypointGatewayClassName,
