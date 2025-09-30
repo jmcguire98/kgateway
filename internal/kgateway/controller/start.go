@@ -313,6 +313,7 @@ func (c *ControllerBuilder) Build(ctx context.Context) error {
 		},
 		AgentgatewayImageInfo: &deployer.ImageInfo{
 			Registry:   deployer.AgentgatewayRegistry,
+			Repository: deployer.AgentgatewayImage,
 			Tag:        deployer.AgentgatewayDefaultTag,
 			PullPolicy: globalSettings.DefaultImagePullPolicy,
 		},
