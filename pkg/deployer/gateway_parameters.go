@@ -17,15 +17,15 @@ import (
 
 // Inputs is the set of options used to configure gateway/inference pool deployment.
 type Inputs struct {
-	Dev                       bool
-	IstioAutoMtlsEnabled      bool
-	ControlPlane              ControlPlaneInfo
-	EnvoyImageInfo            *ImageInfo
-	AgentgatewayImageInfo     *ImageInfo
-	CommonCollections         *collections.CommonCollections
-	GatewayClassName          string
-	WaypointGatewayClassName  string
-	AgentgatewayClassName     string
+	Dev                      bool
+	IstioAutoMtlsEnabled     bool
+	ControlPlane             ControlPlaneInfo
+	EnvoyImageInfo           *ImageInfo
+	AgentgatewayImageInfo    *ImageInfo
+	CommonCollections        *collections.CommonCollections
+	GatewayClassName         string
+	WaypointGatewayClassName string
+	AgentgatewayClassName    string
 }
 
 type ExtraGatewayParameters struct {
@@ -182,7 +182,6 @@ func defaultWaypointGatewayParameters(envoyImageInfo *ImageInfo, omitDefaultSecu
 	gwp.Spec.Kube.PodTemplate.ExtraAnnotations[annotation.AmbientDnsCapture.Name] = "false"
 	return gwp
 }
-
 
 // defaultGatewayParameters returns an in-memory GatewayParameters with the default values
 // set for the gateway.
