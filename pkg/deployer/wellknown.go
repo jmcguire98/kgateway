@@ -24,4 +24,6 @@ const (
 	SdsImage = "sds"
 	// SdsContainerName is the name of the container in the proxy deployment for the SDS integration.
 	SdsContainerName = "sds"
+	// DefaultEnvoyRegistry is the default registry for envoy images
+	DefaultEnvoyRegistry = "ghcr.io/kgateway-dev"
 )

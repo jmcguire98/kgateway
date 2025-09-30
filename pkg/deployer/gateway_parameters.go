@@ -189,7 +189,7 @@ func defaultGatewayParameters(envoyImageInfo *ImageInfo, agentgatewayImageInfo *
 	// Provide default ImageInfo when nil
 	if envoyImageInfo == nil {
 		envoyImageInfo = &ImageInfo{
-			Registry:   "ghcr.io/kgateway-dev",
+			Registry:   DefaultEnvoyRegistry,
 			Tag:        "latest",
 			PullPolicy: "IfNotPresent",
 		}
