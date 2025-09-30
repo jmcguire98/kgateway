@@ -464,8 +464,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -554,8 +555,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -637,8 +639,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -664,7 +667,7 @@ var _ = Describe("Deployer", func() {
 			deployment := objs.findDeployment(defaultNamespace, "agent-gateway")
 			Expect(deployment).ToNot(BeNil())
 			// check the image uses the override tag
-			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("agentgateway"))
+			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("custom-agw-repo"))
 			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("0.4.0"))
 			// check security context and resource requirements are correctly set
 			expectedSecurityContext := deployment.Spec.Template.Spec.Containers[0].SecurityContext
@@ -742,8 +745,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -833,8 +837,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -904,8 +909,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1008,8 +1014,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1084,8 +1091,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1180,8 +1188,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1212,8 +1221,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 				GatewayClassName:         wellknown.DefaultGatewayClassName,
 				WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
@@ -1290,8 +1300,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 			})
 			chart, err := deployerinternal.LoadGatewayChart()
@@ -1342,8 +1353,9 @@ var _ = Describe("Deployer", func() {
 					Tag:      "bar",
 				},
 				AgentgatewayImageInfo: &deployer.ImageInfo{
-					Registry: deployer.AgentgatewayRegistry,
-					Tag:      deployer.AgentgatewayDefaultTag,
+					Registry:   "custom-agw-registry",
+					Repository: "custom-agw-repo",
+					Tag:        "custom-agw-tag",
 				},
 			})
 			chart, err := deployerinternal.LoadGatewayChart()
@@ -1411,8 +1423,9 @@ var _ = Describe("Deployer", func() {
 						Tag:      tag,
 					},
 					AgentgatewayImageInfo: &deployer.ImageInfo{
-						Registry: deployer.AgentgatewayRegistry,
-						Tag:      deployer.AgentgatewayDefaultTag,
+						Registry:   "custom-agw-registry",
+						Repository: "custom-agw-repo",
+						Tag:        "custom-agw-tag",
 					},
 				})
 				chart, err := deployerinternal.LoadGatewayChart()
@@ -1510,8 +1523,9 @@ var _ = Describe("Deployer", func() {
 						Tag:      tag,
 					},
 					AgentgatewayImageInfo: &deployer.ImageInfo{
-						Registry: deployer.AgentgatewayRegistry,
-						Tag:      deployer.AgentgatewayDefaultTag,
+						Registry:   "custom-agw-registry",
+						Repository: "custom-agw-repo",
+						Tag:        "custom-agw-tag",
 					},
 				})
 				chart, err := deployerinternal.LoadGatewayChart()
@@ -1617,8 +1631,9 @@ var _ = Describe("Deployer", func() {
 						Tag:      tag,
 					},
 					AgentgatewayImageInfo: &deployer.ImageInfo{
-						Registry: deployer.AgentgatewayRegistry,
-						Tag:      deployer.AgentgatewayDefaultTag,
+						Registry:   "custom-agw-registry",
+						Repository: "custom-agw-repo",
+						Tag:        "custom-agw-tag",
 					},
 				})
 				chart, err := deployerinternal.LoadGatewayChart()
