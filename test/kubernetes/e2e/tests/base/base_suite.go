@@ -266,7 +266,8 @@ func newGatewayHelper(testInst *e2e.TestInstallation) *defaultGatewayHelper {
 
 		// empty is ok as we only care whether it's self-managed or not
 		&deployer.Inputs{
-			ImageInfo:                &deployer.ImageInfo{},
+			EnvoyImageInfo:           &deployer.ImageInfo{},
+			AgentgatewayImageInfo:    &deployer.ImageInfo{},
 			GatewayClassName:         wellknown.DefaultGatewayClassName,
 			WaypointGatewayClassName: wellknown.DefaultWaypointClassName,
 			AgentgatewayClassName:    wellknown.DefaultAgwClassName,
