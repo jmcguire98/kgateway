@@ -380,7 +380,7 @@ func (s *StatusSyncer) syncGatewayStatus(ctx context.Context, logger *slog.Logge
 			}
 
 			if string(gwClass.Spec.ControllerName) != s.controllerName {
-				logger.Debug("skipping status sync for non-kgateway controller", "gateway", gwnn.String(), "controllerName", gwClass.Spec.ControllerName)
+				logger.Debug("skipping status sync for non-kgateway controller", "gateway", gwnn.String(), "controllerName", gwClass.Spec.ControllerName, "gatewayClassName", gw.Spec.GatewayClassName)
 				return nil
 			}
 

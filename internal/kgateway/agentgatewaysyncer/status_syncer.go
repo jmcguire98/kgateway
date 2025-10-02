@@ -526,7 +526,7 @@ func (s *AgentGwStatusSyncer) syncGatewayStatus(ctx context.Context, logger *slo
 			}
 
 			if string(gwClass.Spec.ControllerName) != s.controllerName {
-				logger.Debug("skipping status sync for non-agentgateway controller", logKeyGateway, gwnn.String(), "controllerName", gwClass.Spec.ControllerName)
+				logger.Debug("skipping status sync for non-agentgateway controller", logKeyGateway, gwnn.String(), "controllerName", gwClass.Spec.ControllerName, "gatewayClassName", gw.Spec.GatewayClassName)
 				continue
 			}
 
