@@ -32,7 +32,7 @@ type gatewayClassProvisioner struct {
 	// classConfigs maps a GatewayClass name to its desired configuration.
 	classConfigs map[string]*deployer.GatewayClassInfo
 	// initialReconcileCh is a channel that is used to trigger initial reconciliation when
-	// no GatewayClass objects exist in the cluster.
+	// some required gatewayclasses are missing or need updates.
 	initialReconcileCh chan event.TypedGenericEvent[client.Object]
 	// defaultControllerName is the name of the default controller that is managing the GatewayClass objects (kgateway).
 	defaultControllerName string
@@ -113,9 +113,24 @@ func (r *gatewayClassProvisioner) Reconcile(ctx context.Context, req ctrl.Reques
 
 func (r *gatewayClassProvisioner) createGatewayClass(ctx context.Context, name string, config *deployer.GatewayClassInfo) error {
 	gc := &apiv1.GatewayClass{}
+	var oldParametersRef *apiv1.ParametersReference
 	err := r.Get(ctx, client.ObjectKey{Name: name}, gc)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
+	}
+	// if the gatewayclass already exists, we don't need to create it, but we might need to update it
+	if err == nil {
+		oldParametersRef = gc.Spec.ParametersRef
+		if r.gatewayClassNeedsUpdate(gc, config) {
+			// if we need to update the gatewayclass, we need to delete it and create a new one
+			// because controller name is immutable.
+			if err := r.Delete(ctx, gc); err != nil && !apierrors.IsNotFound(err) {
+				return err
+			}
+		} else {
+			// if the gatewayclass already exists and doesn't need an update, we can return early
+			return nil
+		}
 	}
 
 	controllerName := r.defaultControllerName
@@ -135,9 +150,13 @@ func (r *gatewayClassProvisioner) createGatewayClass(ctx context.Context, name s
 	if config.Description != "" {
 		gc.Spec.Description = ptr.To(config.Description)
 	}
-	if config.ParametersRef != nil {
+	// if we found an existing gatewayclass, we should preserve the parametersRef if it existed to make the upgrade smoother
+	if oldParametersRef != nil {
+		gc.Spec.ParametersRef = oldParametersRef
+	} else if config.ParametersRef != nil {
 		gc.Spec.ParametersRef = config.ParametersRef
 	}
+
 	if err := r.Create(ctx, gc); err != nil && !apierrors.IsAlreadyExists(err) {
 		return err
 	}
@@ -156,23 +175,40 @@ func (r *gatewayClassProvisioner) Start(ctx context.Context) error {
 
 	// Check whether there are any GatewayClass objects in the cluster to determine
 	// whether we need to manually trigger initial reconciliation.
-	var gcs apiv1.GatewayClassList
-	if err := r.List(ctx, &gcs); err != nil {
+	var currentGcsOnCluster apiv1.GatewayClassList
+	if err := r.List(ctx, &currentGcsOnCluster); err != nil {
 		return fmt.Errorf("failed to list gatewayclasses: %w", err)
 	}
-	var missing bool
-	for _, gc := range gcs.Items {
-		if _, exists := r.classConfigs[gc.Name]; !exists {
-			missing = true
-			break
+	var missingOrNeedUpdates bool
+	existingClasses := make(map[string]apiv1.GatewayClass)
+	if len(currentGcsOnCluster.Items) >= len(r.classConfigs) {
+		for _, gc := range currentGcsOnCluster.Items {
+			existingClasses[gc.Name] = gc
 		}
+
+		for name := range r.classConfigs {
+			if gc, exists := existingClasses[name]; !exists {
+				// a required gatewayclass is missing
+				missingOrNeedUpdates = true
+				break
+			} else if r.gatewayClassNeedsUpdate(&gc, r.classConfigs[name]) {
+				// a required gatewayclass needs an update
+				missingOrNeedUpdates = true
+				break
+			}
+		}
+	} else {
+		// the length of the currentGcsOnCluster.Items is less than the length of the classConfigs
+		// so we must be missing some required gatewayclasses
+		missingOrNeedUpdates = true
 	}
-	if len(gcs.Items) > 0 && !missing {
+
+	if len(currentGcsOnCluster.Items) > 0 && !missingOrNeedUpdates {
 		log.Info("all required gatewayclasses found, skipping initial reconciliation")
 		return nil
 	}
 
-	log.Info("some required gatewayclasses missing, triggering initial reconciliation")
+	log.Info("some required gatewayclasses missing or need updates, triggering initial reconciliation")
 	r.initialReconcileCh <- event.TypedGenericEvent[client.Object]{
 		Object: &apiv1.GatewayClass{
 			ObjectMeta: metav1.ObjectMeta{
@@ -190,4 +226,26 @@ func (r *gatewayClassProvisioner) Start(ctx context.Context) error {
 // NeedLeaderElection returns true to ensure that the gatewayClassProvisioner runs only on the leader
 func (r *gatewayClassProvisioner) NeedLeaderElection() bool {
 	return true
+}
+
+// gatewayClassNeedsUpdate returns true if the gatewayclass needs an update
+func (r *gatewayClassProvisioner) gatewayClassNeedsUpdate(gc *apiv1.GatewayClass, config *deployer.GatewayClassInfo) bool {
+	expectedControllerName := config.ControllerName
+	if expectedControllerName == "" {
+		expectedControllerName = r.defaultControllerName
+	}
+
+	if gc.Spec.ControllerName != apiv1.GatewayController(expectedControllerName) {
+		return true
+	}
+
+	// Check description, only compare if we actually have a description to set
+	if config.Description != "" {
+		if gc.Spec.Description == nil || *gc.Spec.Description != config.Description {
+			return true
+		}
+	}
+	// If config.Description is empty, we don't care what the current description is
+
+	return false
 }
