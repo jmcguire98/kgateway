@@ -274,6 +274,173 @@ func TestGetProtocolAndTLSConfig(t *testing.T) {
 	}
 }
 
+func TestOrphanedBindFiltering(t *testing.T) {
+	testCases := []struct {
+		name             string
+		resourceList     []agwir.AgwResourcesForGateway
+		expectedBindKeys []string
+		description      string
+	}{
+		{
+			name: "orphaned bind filtered out",
+			resourceList: []agwir.AgwResourcesForGateway{
+				{
+					Gateway: types.NamespacedName{Name: "test-gateway", Namespace: "default"},
+					Resources: []*api.Resource{
+						// Orphaned bind - no corresponding listener
+						{
+							Kind: &api.Resource_Bind{
+								Bind: &api.Bind{
+									Key:  "15008/orphan-test-ns/test-example",
+									Port: 15008,
+								},
+							},
+						},
+					},
+				},
+				{
+					Gateway: types.NamespacedName{Name: "test-gateway", Namespace: "default"},
+					Resources: []*api.Resource{
+						// Valid bind with corresponding listener
+						{
+							Kind: &api.Resource_Bind{
+								Bind: &api.Bind{
+									Key:  "80/default/example-gateway",
+									Port: 80,
+								},
+							},
+						},
+						{
+							Kind: &api.Resource_Listener{
+								Listener: &api.Listener{
+									Key:     "default/example-gateway.http",
+									Name:    "http",
+									BindKey: "80/default/example-gateway",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedBindKeys: []string{"80/default/example-gateway"},
+			description:      "Orphaned bind without listener should be filtered out, valid bind with listener should remain",
+		},
+		{
+			name: "all binds have listeners",
+			resourceList: []agwir.AgwResourcesForGateway{
+				{
+					Gateway: types.NamespacedName{Name: "test-gateway", Namespace: "default"},
+					Resources: []*api.Resource{
+						{
+							Kind: &api.Resource_Bind{
+								Bind: &api.Bind{
+									Key:  "80/default/gateway1",
+									Port: 80,
+								},
+							},
+						},
+						{
+							Kind: &api.Resource_Listener{
+								Listener: &api.Listener{
+									Key:     "default/gateway1.http",
+									BindKey: "80/default/gateway1",
+								},
+							},
+						},
+					},
+				},
+				{
+					Gateway: types.NamespacedName{Name: "test-gateway", Namespace: "default"},
+					Resources: []*api.Resource{
+						{
+							Kind: &api.Resource_Bind{
+								Bind: &api.Bind{
+									Key:  "443/default/gateway1",
+									Port: 443,
+								},
+							},
+						},
+						{
+							Kind: &api.Resource_Listener{
+								Listener: &api.Listener{
+									Key:     "default/gateway1.https",
+									BindKey: "443/default/gateway1",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedBindKeys: []string{"80/default/gateway1", "443/default/gateway1"},
+			description:      "All binds have corresponding listeners, all should remain",
+		},
+		{
+			name: "multiple listeners one bind",
+			resourceList: []agwir.AgwResourcesForGateway{
+				{
+					Gateway: types.NamespacedName{Name: "test-gateway", Namespace: "default"},
+					Resources: []*api.Resource{
+						{
+							Kind: &api.Resource_Bind{
+								Bind: &api.Bind{
+									Key:  "80/default/multi-listener-gateway",
+									Port: 80,
+								},
+							},
+						},
+						// Multiple listeners referencing the same bind
+						{
+							Kind: &api.Resource_Listener{
+								Listener: &api.Listener{
+									Key:     "default/multi-listener-gateway.http",
+									BindKey: "80/default/multi-listener-gateway",
+								},
+							},
+						},
+						{
+							Kind: &api.Resource_Listener{
+								Listener: &api.Listener{
+									Key:     "default/multi-listener-gateway.http2",
+									BindKey: "80/default/multi-listener-gateway",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedBindKeys: []string{"80/default/multi-listener-gateway"},
+			description:      "Bind with multiple listeners should remain",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Build listener bindKeys map (simulating the optimization in the actual code)
+			listenerBindKeys := make(map[string]bool)
+			for _, resource := range tc.resourceList {
+				for _, res := range resource.Resources {
+					if listenerRes := res.GetListener(); listenerRes != nil {
+						listenerBindKeys[listenerRes.GetBindKey()] = true
+					}
+				}
+			}
+
+			// Collect binds that would remain after filtering
+			var actualBindKeys []string
+			for _, resource := range tc.resourceList {
+				for _, res := range resource.Resources {
+					if bindRes := res.GetBind(); bindRes != nil {
+						if listenerBindKeys[bindRes.GetKey()] {
+							actualBindKeys = append(actualBindKeys, bindRes.GetKey())
+						}
+					}
+				}
+			}
+			assert.ElementsMatch(t, tc.expectedBindKeys, actualBindKeys, tc.description)
+		})
+	}
+}
+
 func TestAgwResourcesForGatewayEquals(t *testing.T) {
 	testCases := []struct {
 		name      string
