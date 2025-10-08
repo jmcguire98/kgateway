@@ -527,7 +527,7 @@ func (s *Syncer) buildXDSCollection(
 				// Skip binds that have no corresponding listeners
 				if bindRes := res.GetBind(); bindRes != nil {
 					if !listenerBindKeys[bindRes.GetKey()] {
-						logger.Debug("skipping orphaned bind with no listeners", "bindKey", bindRes.GetKey(), "gateway", gwNamespacedName)
+						logger.Debug("skipping orphaned bind with no listeners", "bind_key", bindRes.GetKey(), "gateway", gwNamespacedName)
 						continue
 					}
 				}
