@@ -487,6 +487,17 @@ func (s *Syncer) buildXDSCollection(
 		attachedRoutes := make(map[string]uint)
 		// Use index to fetch only resources for this gateway instead of all resources
 		resourceList := krt.Fetch(kctx, agwResources, krt.FilterIndex(agwResourcesByGateway, gwNamespacedName))
+
+		// Build a set of all listener bindKeys for efficient bind validation
+		listenerBindKeys := make(map[string]bool)
+		for _, resource := range resourceList {
+			for _, res := range resource.Resources {
+				if listenerRes := res.GetListener(); listenerRes != nil {
+					listenerBindKeys[listenerRes.GetBindKey()] = true
+				}
+			}
+		}
+
 		for _, resource := range resourceList {
 			// 1. merge GW Reports for all Proxies' status reports
 			maps.Copy(gwReports.Gateways, resource.Report.Gateways)
@@ -513,6 +524,14 @@ func (s *Syncer) buildXDSCollection(
 			}
 
 			for _, res := range resource.Resources {
+				// Skip binds that have no corresponding listeners
+				if bindRes := res.GetBind(); bindRes != nil {
+					if !listenerBindKeys[bindRes.GetKey()] {
+						logger.Debug("skipping orphaned bind with no listeners", "bindKey", bindRes.GetKey(), "gateway", gwNamespacedName)
+						continue
+					}
+				}
+
 				cacheResources = append(cacheResources, &translator.AgwResourceWithCustomName{
 					Message: res,
 					Name:    agwir.GetAgwResourceName(res),
