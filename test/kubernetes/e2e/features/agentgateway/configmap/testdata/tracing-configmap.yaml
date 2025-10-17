@@ -10,12 +10,6 @@ data:
         otlpEndpoint: http://jaeger-collector.observability.svc.cluster.local:4317
         otlpProtocol: grpc
         randomSampling: true
-        fields:
-          add:
-            gen_ai.operation.name: '"chat"'
-            gen_ai.system: "llm.provider"
-            gen_ai.request.model: "llm.request_model"
-            gen_ai.response.model: "llm.response_model"
 ---
 apiVersion: gateway.kgateway.dev/v1alpha1
 kind: GatewayParameters

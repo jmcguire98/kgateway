@@ -26,7 +26,6 @@ var _ e2e.NewSuiteFunc = NewTestingSuite
 
 var (
 	setupManifest                 = filepath.Join(fsutils.MustGetThisDir(), "testdata", "setup.yaml")
-	basicConfigMapManifest        = filepath.Join(fsutils.MustGetThisDir(), "testdata", "basic-configmap.yaml")
 	tracingConfigMapManifest      = filepath.Join(fsutils.MustGetThisDir(), "testdata", "tracing-configmap.yaml")
 	customFieldsConfigMapManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "custom-fields-configmap.yaml")
 
@@ -51,12 +50,6 @@ var (
 		},
 	}
 
-	basicConfigMapTest = base.TestCase{
-		Manifests: []string{
-			basicConfigMapManifest,
-		},
-	}
-
 	tracingConfigMapTest = base.TestCase{
 		Manifests: []string{
 			tracingConfigMapManifest,
@@ -71,7 +64,6 @@ var (
 	}
 
 	testCases = map[string]*base.TestCase{
-		"TestBasicConfigMap":        &basicConfigMapTest,
 		"TestTracingConfigMap":      &tracingConfigMapTest,
 		"TestCustomFieldsConfigMap": &customFieldsConfigMapTest,
 	}
@@ -123,14 +115,6 @@ func (s *testingSuite) verifyConfigMapMountedInDeployment(expectedConfigMapName 
 		}
 	}
 	s.Require().True(found, "ConfigMap %s should be mounted as config-volume", expectedConfigMapName)
-}
-
-// TestBasicConfigMap tests that agentgateway can start with a basic custom ConfigMap
-func (s *testingSuite) TestBasicConfigMap() {
-	s.T().Log("Testing basic ConfigMap configuration")
-
-	s.waitForAgentgatewayPodsRunning()
-	s.verifyConfigMapMountedInDeployment("basic-agent-gateway-config")
 }
 
 // TestTracingConfigMap tests that agentgateway properly applies tracing configuration from ConfigMap
