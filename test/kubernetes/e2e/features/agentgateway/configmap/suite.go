@@ -4,16 +4,19 @@ package configmap
 
 import (
 	"context"
+	"net/http"
 	"path/filepath"
 	"time"
 
 	"github.com/stretchr/testify/suite"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/fsutils"
+	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
+	"github.com/kgateway-dev/kgateway/v2/pkg/utils/requestutils/curl"
+	testmatchers "github.com/kgateway-dev/kgateway/v2/test/gomega/matchers"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e"
 	testdefaults "github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/defaults"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/tests/base"
@@ -22,13 +25,11 @@ import (
 var _ e2e.NewSuiteFunc = NewTestingSuite
 
 var (
-	// manifests
 	setupManifest                 = filepath.Join(fsutils.MustGetThisDir(), "testdata", "setup.yaml")
 	basicConfigMapManifest        = filepath.Join(fsutils.MustGetThisDir(), "testdata", "basic-configmap.yaml")
 	tracingConfigMapManifest      = filepath.Join(fsutils.MustGetThisDir(), "testdata", "tracing-configmap.yaml")
 	customFieldsConfigMapManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "custom-fields-configmap.yaml")
 
-	// objects
 	gatewayObjectMeta = metav1.ObjectMeta{
 		Name:      "configmap-gateway",
 		Namespace: "default",
@@ -39,7 +40,6 @@ var (
 		Namespace: "default",
 	}
 
-	// test cases
 	setup = base.TestCase{
 		Manifests: []string{
 			testdefaults.CurlPodManifest,
@@ -65,6 +65,7 @@ var (
 
 	customFieldsConfigMapTest = base.TestCase{
 		Manifests: []string{
+			testdefaults.HttpbinManifest,
 			customFieldsConfigMapManifest,
 		},
 	}
@@ -141,23 +142,34 @@ func (s *testingSuite) TestTracingConfigMap() {
 }
 
 // TestCustomFieldsConfigMap tests that agentgateway applies custom field configuration from ConfigMap
+// and can successfully route requests to httpbin
 func (s *testingSuite) TestCustomFieldsConfigMap() {
-	s.T().Log("Testing custom fields ConfigMap configuration")
+	s.T().Log("Testing custom fields ConfigMap configuration with end-to-end routing")
 
 	s.waitForAgentgatewayPodsRunning()
 	s.verifyConfigMapMountedInDeployment("custom-fields-agent-gateway-config")
 
-	// Verify the ConfigMap exists and has the expected content
-	configMapObj := &corev1.ConfigMap{}
-	err := s.TestInstallation.ClusterContext.Client.Get(
+	// Wait for httpbin to be ready
+	s.TestInstallation.Assertions.EventuallyPodsRunning(
 		s.T().Context(),
-		client.ObjectKey{
-			Namespace: "default",
-			Name:      "custom-fields-agent-gateway-config",
-		},
-		configMapObj,
+		"default",
+		metav1.ListOptions{LabelSelector: testdefaults.HttpbinLabelSelector},
+		60*time.Second,
 	)
-	s.Require().NoError(err)
-	s.Require().Contains(configMapObj.Data, "config.yaml", "ConfigMap should contain config.yaml key")
-	s.Require().Contains(configMapObj.Data["config.yaml"], "gen_ai.operation.name", "ConfigMap should contain custom trace fields")
+
+	// Test end-to-end functionality by making an HTTP request through the gateway to httpbin
+	s.TestInstallation.Assertions.AssertEventualCurlResponse(
+		s.T().Context(),
+		testdefaults.CurlPodExecOpt,
+		[]curl.Option{
+			curl.WithHost(kubeutils.ServiceFQDN(gatewayObjectMeta)),
+			curl.WithPort(8080),
+			curl.WithPath("/get"),
+			curl.WithHeader("x-user-id", "test-user-123"),
+		},
+		&testmatchers.HttpResponse{
+			StatusCode: http.StatusOK,
+		},
+		30*time.Second,
+	)
 }
