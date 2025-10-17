@@ -68,14 +68,14 @@ spec:
 apiVersion: gateway.kgateway.dev/v1alpha1
 kind: Backend
 metadata:
-  name: static-backend
+  name: httpbin-backend
   namespace: default
 spec:
   type: Static
   static:
     hosts:
-    - host: httpbin.org
-      port: 80
+    - host: httpbin.default.svc.cluster.local
+      port: 8000
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -88,11 +88,11 @@ spec:
     kind: Gateway
     name: configmap-gateway
   rules:
-  - name: static
+  - name: httpbin
     backendRefs:
     - group: gateway.kgateway.dev
       kind: Backend
-      name: static-backend
+      name: httpbin-backend
     matches:
     - path:
         type: PathPrefix
