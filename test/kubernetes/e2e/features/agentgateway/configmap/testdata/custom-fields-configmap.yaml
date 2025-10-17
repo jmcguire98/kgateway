@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-fields-agent-gateway-config
+  namespace: default
+data:
+  config.yaml: |-
+    config:
+      tracing:
+        otlpEndpoint: http://localhost:4317
+        otlpProtocol: grpc
+        randomSampling: true
+        fields:
+          add:
+            # Standard OpenTelemetry AI semantic conventions
+            gen_ai.operation.name: '"chat"'
+            gen_ai.system: "llm.provider"
+            gen_ai.request.model: "llm.request_model"
+            gen_ai.response.model: "llm.response_model"
+            gen_ai.usage.completion_tokens: "llm.output_tokens"
+            gen_ai.usage.prompt_tokens: "llm.input_tokens"
+
+            # Custom business logic fields
+            user.id: "request.headers['x-user-id'] || 'anonymous'"
+            request.path: "request.path"
+            backend.type: "llm.provider"
+            custom.field.example: '"test-value"'
+---
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: GatewayParameters
+metadata:
+  name: custom-fields-configmap-gateway-params
+  namespace: default
+spec:
+  kube:
+    agentgateway:
+      enabled: true
+      logLevel: debug
+      customConfigMapName: custom-fields-agent-gateway-config
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: agentgateway-custom-fields-configmap
+spec:
+  controllerName: kgateway.dev/agentgateway
+  parametersRef:
+    group: gateway.kgateway.dev
+    kind: GatewayParameters
+    name: custom-fields-configmap-gateway-params
+    namespace: default
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: configmap-gateway
+  namespace: default
+spec:
+  gatewayClassName: agentgateway-custom-fields-configmap
+  listeners:
+  - allowedRoutes:
+      namespaces:
+        from: Same
+    name: http
+    port: 8080
+    protocol: HTTP
+---
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: Backend
+metadata:
+  name: static-backend
+  namespace: default
+spec:
+  type: Static
+  static:
+    hosts:
+    - host: httpbin.org
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: custom-fields-configmap-test-route
+  namespace: default
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: configmap-gateway
+  rules:
+  - name: static
+    backendRefs:
+    - group: gateway.kgateway.dev
+      kind: Backend
+      name: static-backend
+    matches:
+    - path:
+        type: PathPrefix
+        value: /

@@ -6,6 +6,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/features/agentgateway"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/features/agentgateway/aibackend"
+	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/features/agentgateway/configmap"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/features/agentgateway/extauth"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/features/agentgateway/mcp"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/features/agentgateway/rbac"
@@ -28,6 +29,7 @@ func AgentgatewaySuiteRunner() e2e.SuiteRunner {
 	agentgatewaySuiteRunner.Register("Transformation", transformation.NewTestingSuite)
 	agentgatewaySuiteRunner.Register("BackendTLSPolicy", backendtls.NewAgentgatewayTestingSuite)
 	agentgatewaySuiteRunner.Register("AIBackend", aibackend.NewTestingSuite)
+	agentgatewaySuiteRunner.Register("ConfigMap", configmap.NewTestingSuite)
 
 	return agentgatewaySuiteRunner
 }
