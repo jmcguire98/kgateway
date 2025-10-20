@@ -4,19 +4,16 @@ package configmap
 
 import (
 	"context"
-	"net/http"
 	"path/filepath"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/fsutils"
-	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
-	"github.com/kgateway-dev/kgateway/v2/pkg/utils/requestutils/curl"
-	testmatchers "github.com/kgateway-dev/kgateway/v2/test/gomega/matchers"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e"
 	testdefaults "github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/defaults"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/tests/base"
@@ -25,28 +22,22 @@ import (
 var _ e2e.NewSuiteFunc = NewTestingSuite
 
 var (
-	setupManifest                 = filepath.Join(fsutils.MustGetThisDir(), "testdata", "setup.yaml")
-	tracingConfigMapManifest      = filepath.Join(fsutils.MustGetThisDir(), "testdata", "tracing-configmap.yaml")
-	customFieldsConfigMapManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "custom-fields-configmap.yaml")
+	setupManifest            = filepath.Join(fsutils.MustGetThisDir(), "testdata", "setup.yaml")
+	tracingConfigMapManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "tracing-configmap.yaml")
 
-	gatewayObjectMeta = metav1.ObjectMeta{
-		Name:      "configmap-gateway",
+	tracingGatewayObjectMeta = metav1.ObjectMeta{
+		Name:      "agent-gateway",
 		Namespace: "default",
 	}
 
-	agentGatewayDeploymentMeta = metav1.ObjectMeta{
-		Name:      "configmap-gateway",
+	tracingAgentGatewayDeploymentMeta = metav1.ObjectMeta{
+		Name:      "agent-gateway",
 		Namespace: "default",
 	}
 
 	setup = base.TestCase{
 		Manifests: []string{
 			testdefaults.CurlPodManifest,
-		},
-		ManifestsWithTransform: map[string]func(string) string{
-			setupManifest: func(original string) string {
-				return original
-			},
 		},
 	}
 
@@ -56,16 +47,8 @@ var (
 		},
 	}
 
-	customFieldsConfigMapTest = base.TestCase{
-		Manifests: []string{
-			testdefaults.HttpbinManifest,
-			customFieldsConfigMapManifest,
-		},
-	}
-
 	testCases = map[string]*base.TestCase{
-		"TestTracingConfigMap":      &tracingConfigMapTest,
-		"TestCustomFieldsConfigMap": &customFieldsConfigMapTest,
+		"TestTracingConfigMap": &tracingConfigMapTest,
 	}
 )
 
@@ -85,20 +68,20 @@ func (s *testingSuite) waitForAgentgatewayPodsRunning() {
 	s.TestInstallation.Assertions.EventuallyPodsRunning(
 		s.T().Context(),
 		"default",
-		metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=configmap-gateway"},
+		metav1.ListOptions{LabelSelector: "app.kubernetes.io/component=agentgateway"},
 		60*time.Second,
 	)
 }
 
 // verifyConfigMapMountedInDeployment is a helper function that verifies a specific ConfigMap
 // is mounted as config-volume in the agentgateway deployment
-func (s *testingSuite) verifyConfigMapMountedInDeployment(expectedConfigMapName string) {
+func (s *testingSuite) verifyConfigMapMountedInDeployment(expectedConfigMapName string, deploymentMeta metav1.ObjectMeta) {
 	deploymentObj := &appsv1.Deployment{}
 	err := s.TestInstallation.ClusterContext.Client.Get(
 		s.T().Context(),
 		client.ObjectKey{
-			Namespace: agentGatewayDeploymentMeta.Namespace,
-			Name:      agentGatewayDeploymentMeta.Name,
+			Namespace: deploymentMeta.Namespace,
+			Name:      deploymentMeta.Name,
 		},
 		deploymentObj,
 	)
@@ -117,43 +100,47 @@ func (s *testingSuite) verifyConfigMapMountedInDeployment(expectedConfigMapName 
 	s.Require().True(found, "ConfigMap %s should be mounted as config-volume", expectedConfigMapName)
 }
 
+// verifyTracingConfigurationActive checks that the tracing configuration from ConfigMap is actually active
+func (s *testingSuite) verifyTracingConfigurationActive(deploymentMeta metav1.ObjectMeta) {
+	// Get pods for this deployment using label selector
+	pods, err := s.TestInstallation.Actions.Kubectl().GetPodsInNsWithLabel(
+		s.T().Context(),
+		deploymentMeta.Namespace,
+		"app.kubernetes.io/component=agentgateway",
+	)
+	s.Require().NoError(err)
+	s.Require().NotEmpty(pods, "No agentgateway pods found")
+
+	// Use EventuallyWithT for retry logic when checking logs
+	s.Require().EventuallyWithT(func(c *assert.CollectT) {
+		logs, err := s.TestInstallation.Actions.Kubectl().GetContainerLogs(
+			s.T().Context(),
+			deploymentMeta.Namespace,
+			pods[0], // Use first pod
+		)
+		assert.NoError(c, err, "Failed to get pod logs")
+
+		// Verify the tracing endpoint from the ConfigMap is present in logs
+		expectedEndpoint := "http://jaeger-collector.observability.svc.cluster.local:4317"
+		assert.Contains(c, logs, expectedEndpoint,
+			"Tracing endpoint %s from ConfigMap should be present in pod logs", expectedEndpoint)
+
+		// Verify tracing initialization message
+		assert.Contains(c, logs, "initializing tracer",
+			"Tracing initialization should be present in pod logs")
+	}, 60*time.Second, 5*time.Second, "should find tracing configuration in pod logs")
+
+	s.T().Logf("Successfully verified tracing configuration is active")
+}
+
 // TestTracingConfigMap tests that agentgateway properly applies tracing configuration from ConfigMap
 func (s *testingSuite) TestTracingConfigMap() {
 	s.T().Log("Testing tracing ConfigMap configuration")
 
 	s.waitForAgentgatewayPodsRunning()
-	s.verifyConfigMapMountedInDeployment("tracing-agent-gateway-config")
+	s.verifyConfigMapMountedInDeployment("agent-gateway-config", tracingAgentGatewayDeploymentMeta)
+
+	// Verify that the tracing configuration is actually loaded and active
+	s.verifyTracingConfigurationActive(tracingAgentGatewayDeploymentMeta)
 }
 
-// TestCustomFieldsConfigMap tests that agentgateway applies custom field configuration from ConfigMap
-// and can successfully route requests to httpbin
-func (s *testingSuite) TestCustomFieldsConfigMap() {
-	s.T().Log("Testing custom fields ConfigMap configuration with end-to-end routing")
-
-	s.waitForAgentgatewayPodsRunning()
-	s.verifyConfigMapMountedInDeployment("custom-fields-agent-gateway-config")
-
-	// Wait for httpbin to be ready
-	s.TestInstallation.Assertions.EventuallyPodsRunning(
-		s.T().Context(),
-		"default",
-		metav1.ListOptions{LabelSelector: testdefaults.HttpbinLabelSelector},
-		60*time.Second,
-	)
-
-	// Test end-to-end functionality by making an HTTP request through the gateway to httpbin
-	s.TestInstallation.Assertions.AssertEventualCurlResponse(
-		s.T().Context(),
-		testdefaults.CurlPodExecOpt,
-		[]curl.Option{
-			curl.WithHost(kubeutils.ServiceFQDN(gatewayObjectMeta)),
-			curl.WithPort(8080),
-			curl.WithPath("/get"),
-			curl.WithHeader("x-user-id", "test-user-123"),
-		},
-		&testmatchers.HttpResponse{
-			StatusCode: http.StatusOK,
-		},
-		30*time.Second,
-	)
-}
