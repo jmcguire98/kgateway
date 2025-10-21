@@ -115,7 +115,7 @@ func (s *testingSuite) verifyTracingConfigurationActive(deploymentMeta metav1.Ob
 		)
 		s.Require().NoError(err, "Failed to get pod logs")
 
-		expectedEndpoint := "http://jaeger-collector.observability.svc.cluster.local:4317"
+		expectedEndpoint := "endpoint: http://jaeger-collector.observability.svc.cluster.local:4317"
 		s.Require().Contains(logs, expectedEndpoint,
 			"Tracing endpoint %s from ConfigMap should be present in pod logs", expectedEndpoint)
 
