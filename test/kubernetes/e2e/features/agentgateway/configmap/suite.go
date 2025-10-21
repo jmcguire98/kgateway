@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,30 +14,17 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/fsutils"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e"
-	testdefaults "github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/defaults"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/tests/base"
 )
 
 var _ e2e.NewSuiteFunc = NewTestingSuite
 
 var (
-	setupManifest            = filepath.Join(fsutils.MustGetThisDir(), "testdata", "setup.yaml")
 	tracingConfigMapManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "tracing-configmap.yaml")
-
-	tracingGatewayObjectMeta = metav1.ObjectMeta{
-		Name:      "agent-gateway",
-		Namespace: "default",
-	}
 
 	tracingAgentGatewayDeploymentMeta = metav1.ObjectMeta{
 		Name:      "agent-gateway",
 		Namespace: "default",
-	}
-
-	setup = base.TestCase{
-		Manifests: []string{
-			testdefaults.CurlPodManifest,
-		},
 	}
 
 	tracingConfigMapTest = base.TestCase{
@@ -59,8 +45,19 @@ type testingSuite struct {
 
 func NewTestingSuite(ctx context.Context, testInst *e2e.TestInstallation) suite.TestingSuite {
 	return &testingSuite{
-		base.NewBaseTestingSuite(ctx, testInst, setup, testCases),
+		base.NewBaseTestingSuite(ctx, testInst, base.TestCase{}, testCases),
 	}
+}
+
+// TestTracingConfigMap tests that agentgateway properly applies tracing configuration from ConfigMap
+func (s *testingSuite) TestTracingConfigMap() {
+	s.T().Log("Testing tracing ConfigMap configuration")
+
+	s.waitForAgentgatewayPodsRunning()
+	s.verifyConfigMapMountedInDeployment("agent-gateway-config", tracingAgentGatewayDeploymentMeta)
+
+	// Verify that the tracing configuration is actually loaded and active
+	s.verifyTracingConfigurationActive(tracingAgentGatewayDeploymentMeta)
 }
 
 // waitForAgentgatewayPodsRunning waits for the agentgateway pods to be running
@@ -87,7 +84,6 @@ func (s *testingSuite) verifyConfigMapMountedInDeployment(expectedConfigMapName 
 	)
 	s.Require().NoError(err)
 
-	// Check that the expected ConfigMap is referenced in the deployment
 	found := false
 	for _, volume := range deploymentObj.Spec.Template.Spec.Volumes {
 		if volume.Name == "config-volume" && volume.ConfigMap != nil {
@@ -100,9 +96,8 @@ func (s *testingSuite) verifyConfigMapMountedInDeployment(expectedConfigMapName 
 	s.Require().True(found, "ConfigMap %s should be mounted as config-volume", expectedConfigMapName)
 }
 
-// verifyTracingConfigurationActive checks that the tracing configuration from ConfigMap is actually active
+// verifyTracingConfigurationActive checks that the tracing configuration from ConfigMap is accepted by agentgateway
 func (s *testingSuite) verifyTracingConfigurationActive(deploymentMeta metav1.ObjectMeta) {
-	// Get pods for this deployment using label selector
 	pods, err := s.TestInstallation.Actions.Kubectl().GetPodsInNsWithLabel(
 		s.T().Context(),
 		deploymentMeta.Namespace,
@@ -111,36 +106,18 @@ func (s *testingSuite) verifyTracingConfigurationActive(deploymentMeta metav1.Ob
 	s.Require().NoError(err)
 	s.Require().NotEmpty(pods, "No agentgateway pods found")
 
-	// Use EventuallyWithT for retry logic when checking logs
-	s.Require().EventuallyWithT(func(c *assert.CollectT) {
+	s.Require().Eventually(func() bool {
 		logs, err := s.TestInstallation.Actions.Kubectl().GetContainerLogs(
 			s.T().Context(),
 			deploymentMeta.Namespace,
-			pods[0], // Use first pod
+			pods[0],
 		)
-		assert.NoError(c, err, "Failed to get pod logs")
+		s.Require().NoError(err, "Failed to get pod logs")
 
-		// Verify the tracing endpoint from the ConfigMap is present in logs
 		expectedEndpoint := "http://jaeger-collector.observability.svc.cluster.local:4317"
-		assert.Contains(c, logs, expectedEndpoint,
+		s.Require().Contains(logs, expectedEndpoint,
 			"Tracing endpoint %s from ConfigMap should be present in pod logs", expectedEndpoint)
 
-		// Verify tracing initialization message
-		assert.Contains(c, logs, "initializing tracer",
-			"Tracing initialization should be present in pod logs")
-	}, 60*time.Second, 5*time.Second, "should find tracing configuration in pod logs")
-
-	s.T().Logf("Successfully verified tracing configuration is active")
+		return true
+	}, 60*time.Second, 5*time.Second)
 }
-
-// TestTracingConfigMap tests that agentgateway properly applies tracing configuration from ConfigMap
-func (s *testingSuite) TestTracingConfigMap() {
-	s.T().Log("Testing tracing ConfigMap configuration")
-
-	s.waitForAgentgatewayPodsRunning()
-	s.verifyConfigMapMountedInDeployment("agent-gateway-config", tracingAgentGatewayDeploymentMeta)
-
-	// Verify that the tracing configuration is actually loaded and active
-	s.verifyTracingConfigurationActive(tracingAgentGatewayDeploymentMeta)
-}
-

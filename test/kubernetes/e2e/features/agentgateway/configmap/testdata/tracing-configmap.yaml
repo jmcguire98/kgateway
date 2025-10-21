@@ -6,8 +6,8 @@ metadata:
 data:
   config.yaml: |-
     config:
-      backend:
-        connectTimeout: 1s
+      tracing:
+        otlpEndpoint: http://jaeger-collector.observability.svc.cluster.local:4317
 ---
 apiVersion: gateway.kgateway.dev/v1alpha1
 kind: GatewayParameters
@@ -46,36 +46,3 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
----
-apiVersion: gateway.kgateway.dev/v1alpha1
-kind: Backend
-metadata:
-  name: static-backend
-  namespace: default
-spec:
-  type: Static
-  static:
-    hosts:
-    - host: httpbin.org
-      port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: test-route
-  namespace: default
-spec:
-  parentRefs:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    name: agent-gateway
-  rules:
-  - name: static
-    backendRefs:
-    - group: gateway.kgateway.dev
-      kind: Backend
-      name: static-backend
-    matches:
-    - path:
-        type: PathPrefix
-        value: /
