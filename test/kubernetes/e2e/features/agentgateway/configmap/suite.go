@@ -14,6 +14,7 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/fsutils"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e"
+	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/defaults"
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/tests/base"
 )
 
@@ -65,7 +66,7 @@ func (s *testingSuite) waitForAgentgatewayPodsRunning() {
 	s.TestInstallation.Assertions.EventuallyPodsRunning(
 		s.T().Context(),
 		"default",
-		metav1.ListOptions{LabelSelector: "app.kubernetes.io/component=agentgateway"},
+		metav1.ListOptions{LabelSelector: defaults.WellKnownAppLabel + "=agent-gateway"},
 		60*time.Second,
 	)
 }
@@ -101,7 +102,7 @@ func (s *testingSuite) verifyTracingConfigurationActive(deploymentMeta metav1.Ob
 	pods, err := s.TestInstallation.Actions.Kubectl().GetPodsInNsWithLabel(
 		s.T().Context(),
 		deploymentMeta.Namespace,
-		"app.kubernetes.io/component=agentgateway",
+		defaults.WellKnownAppLabel+"=agent-gateway",
 	)
 	s.Require().NoError(err)
 	s.Require().NotEmpty(pods, "No agentgateway pods found")
