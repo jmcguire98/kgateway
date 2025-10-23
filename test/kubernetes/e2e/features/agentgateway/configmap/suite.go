@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -21,11 +22,19 @@ import (
 var _ e2e.NewSuiteFunc = NewTestingSuite
 
 var (
+	tracingSetupManifest     = filepath.Join(fsutils.MustGetThisDir(), "testdata", "tracing-setup.yaml")
 	tracingConfigMapManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "tracing-configmap.yaml")
 
 	tracingAgentGatewayDeploymentMeta = metav1.ObjectMeta{
 		Name:      "agent-gateway",
 		Namespace: "default",
+	}
+
+	// configmap manifests applied before the test
+	tracingConfigMapSetup = base.TestCase{
+		Manifests: []string{
+			tracingSetupManifest,
+		},
 	}
 
 	tracingConfigMapTest = base.TestCase{
@@ -46,7 +55,7 @@ type testingSuite struct {
 
 func NewTestingSuite(ctx context.Context, testInst *e2e.TestInstallation) suite.TestingSuite {
 	return &testingSuite{
-		base.NewBaseTestingSuite(ctx, testInst, base.TestCase{}, testCases),
+		base.NewBaseTestingSuite(ctx, testInst, tracingConfigMapSetup, testCases),
 	}
 }
 
@@ -54,11 +63,28 @@ func NewTestingSuite(ctx context.Context, testInst *e2e.TestInstallation) suite.
 func (s *testingSuite) TestTracingConfigMap() {
 	s.T().Log("Testing tracing ConfigMap configuration")
 
+	// Ensure the ConfigMap exists before checking the gateway
+	s.verifyConfigMapExists("agent-gateway-config", "default")
+
 	s.waitForAgentgatewayPodsRunning()
+
 	s.verifyConfigMapMountedInDeployment("agent-gateway-config", tracingAgentGatewayDeploymentMeta)
 
 	// Verify that the tracing configuration is actually loaded and active
 	s.verifyTracingConfigurationActive(tracingAgentGatewayDeploymentMeta)
+}
+
+// verifyConfigMapExists ensures the ConfigMap exists before proceeding
+func (s *testingSuite) verifyConfigMapExists(name, namespace string) {
+	s.T().Logf("Verifying ConfigMap %s exists in namespace %s", name, namespace)
+	s.TestInstallation.Assertions.EventuallyObjectsExist(s.T().Context(),
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "default",
+			},
+		},
+	)
 }
 
 // waitForAgentgatewayPodsRunning waits for the agentgateway pods to be running
