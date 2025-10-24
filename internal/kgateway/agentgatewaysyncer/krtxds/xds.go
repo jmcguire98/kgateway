@@ -51,11 +51,12 @@ var (
 	log                 = logging.New("krtxds")
 	agentGwXdsSubsystem = "agentgateway_xds"
 	xdsRejectsTotal     = metrics.NewCounter(
+
 		metrics.CounterOpts{
 			Subsystem: agentGwXdsSubsystem,
 			Name:      "rejects_total",
 			Help:      "Total number of xDS responses rejected by agentgateway proxy",
-		}, []string{"typeURL", "proxyID", "errorCode"})
+		}, []string{"type_url", "proxy_id", "error_code"})
 )
 
 type CollectionRegistration struct {
@@ -512,9 +513,9 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 		errCode := codes.Code(request.ErrorDetail.Code)
 		log.Warn("ADS: ACK ERROR", "type", stype, "connection", con.ID(), "code", errCode.String(), "message", request.ErrorDetail.GetMessage())
 		xdsRejectsTotal.Inc(
-			metrics.Label{Name: "typeURL", Value: request.TypeUrl},
-			metrics.Label{Name: "proxyID", Value: con.proxy.ID},
-			metrics.Label{Name: "errorCode", Value: errCode.String()},
+			metrics.Label{Name: "type_url", Value: request.TypeUrl},
+			metrics.Label{Name: "proxy_id", Value: con.proxy.ID},
+			metrics.Label{Name: "error_code", Value: errCode.String()},
 		)
 		con.proxy.UpdateWatchedResource(request.TypeUrl, func(wr *model.WatchedResource) *model.WatchedResource {
 			wr.LastError = request.ErrorDetail.GetMessage()
