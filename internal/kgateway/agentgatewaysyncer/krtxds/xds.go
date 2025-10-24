@@ -516,7 +516,6 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 			metrics.Label{Name: "proxyID", Value: con.proxy.ID},
 			metrics.Label{Name: "errorCode", Value: errCode.String()},
 		)
-		xds.IncrementXDSRejects(stype, con.proxy.ID, errCode.String())
 		con.proxy.UpdateWatchedResource(request.TypeUrl, func(wr *model.WatchedResource) *model.WatchedResource {
 			wr.LastError = request.ErrorDetail.GetMessage()
 			return wr
