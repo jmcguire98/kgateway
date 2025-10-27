@@ -219,15 +219,14 @@ func (s *Syncer) buildAgwResources(
 				Name:      gw.ParentGateway.Name,
 			})
 		}
-		return slices.MapFilter(uniq.UnsortedList(), func(e types.NamespacedName) *agwir.AgwResource {
+		return slices.Map(uniq.UnsortedList(), func(e types.NamespacedName) agwir.AgwResource {
 			bind := translator.AgwBind{
 				Bind: &api.Bind{
 					Key:  object.Key + "/" + e.String(),
 					Port: uint32(port), //nolint:gosec // G115: port is always in valid port range
 				},
 			}
-			resource := translator.ToResourceForGateway(e, bind)
-			return &resource
+			return translator.ToResourceForGateway(e, bind)
 		})
 	}, krtopts.ToOptions("Binds")...)
 	if s.agwPlugins.AddResourceExtension != nil && s.agwPlugins.AddResourceExtension.Binds != nil {
