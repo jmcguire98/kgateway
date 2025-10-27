@@ -196,8 +196,17 @@ func (s *Syncer) buildAgwResources(
 	refGrants translator.ReferenceGrants,
 	krtopts krtutil.KrtOptions,
 ) (krt.Collection[agwir.AgwResource], krt.Collection[*translator.RouteAttachment], PolicyStatusCollections) {
+	// filter gateway collections to only include gateways which use a built-in gateway class
+	// (resources for additional gateway classes should be created by the downstream providing them)
+	filteredGateways := krt.NewCollection(gateways, func(ctx krt.HandlerContext, gw translator.GatewayListener) *translator.GatewayListener {
+		if _, isAdditionalClass := s.additionalGatewayClasses[gw.ParentInfo.ParentGatewayClassName]; isAdditionalClass {
+			return nil
+		}
+		return &gw
+	}, krtopts.ToOptions("FilteredGateways")...)
+
 	// Build ports and binds
-	ports := krtpkg.UnnamedIndex(gateways, func(l translator.GatewayListener) []string {
+	ports := krtpkg.UnnamedIndex(filteredGateways, func(l translator.GatewayListener) []string {
 		return []string{fmt.Sprint(l.ParentInfo.Port)}
 	}).AsCollection(krtopts.ToOptions("PortBindings")...)
 
@@ -214,7 +223,6 @@ func (s *Syncer) buildAgwResources(
 			})
 		}
 		return slices.MapFilter(uniq.UnsortedList(), func(e types.NamespacedName) *agwir.AgwResource {
-
 			bind := translator.AgwBind{
 				Bind: &api.Bind{
 					Key:  object.Key + "/" + e.String(),
@@ -230,7 +238,7 @@ func (s *Syncer) buildAgwResources(
 	}
 
 	// Build listeners
-	listeners := krt.NewCollection(gateways, func(ctx krt.HandlerContext, obj translator.GatewayListener) *agwir.AgwResource {
+	listeners := krt.NewCollection(filteredGateways, func(ctx krt.HandlerContext, obj translator.GatewayListener) *agwir.AgwResource {
 		return s.buildListenerFromGateway(obj)
 	}, krtopts.ToOptions("Listeners")...)
 	if s.agwPlugins.AddResourceExtension != nil && s.agwPlugins.AddResourceExtension.Listeners != nil {
@@ -238,7 +246,7 @@ func (s *Syncer) buildAgwResources(
 	}
 
 	// Build routes
-	routeParents := translator.BuildRouteParents(gateways)
+	routeParents := translator.BuildRouteParents(filteredGateways)
 	routeInputs := translator.RouteContextInputs{
 		Grants:          refGrants,
 		RouteParents:    routeParents,
