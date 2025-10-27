@@ -25,6 +25,7 @@ import (
 	agwir "github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/plugins"
 	"github.com/kgateway-dev/kgateway/v2/pkg/agentgateway/translator"
+	"github.com/kgateway-dev/kgateway/v2/pkg/deployer"
 	"github.com/kgateway-dev/kgateway/v2/pkg/logging"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/krtutil"
 	krtpkg "github.com/kgateway-dev/kgateway/v2/pkg/utils/krtutil"
@@ -51,7 +52,8 @@ type Syncer struct {
 	translator     *translator.AgwTranslator
 
 	// Configuration
-	controllerName string
+	controllerName           string
+	additionalGatewayClasses map[string]*deployer.GatewayClassInfo
 
 	// Status reporting
 	statusCollections *status.StatusCollections
@@ -69,14 +71,16 @@ func NewAgwSyncer(
 	client kube.Client,
 	agwCollections *plugins.AgwCollections,
 	agwPlugins plugins.AgwPlugin,
+	additionalGatewayClasses map[string]*deployer.GatewayClassInfo,
 ) *Syncer {
 	return &Syncer{
-		agwCollections:    agwCollections,
-		controllerName:    controllerName,
-		agwPlugins:        agwPlugins,
-		translator:        translator.NewAgwTranslator(agwCollections),
-		client:            client,
-		statusCollections: &status.StatusCollections{},
+		agwCollections:           agwCollections,
+		controllerName:           controllerName,
+		agwPlugins:               agwPlugins,
+		translator:               translator.NewAgwTranslator(agwCollections),
+		additionalGatewayClasses: additionalGatewayClasses,
+		client:                   client,
+		statusCollections:        &status.StatusCollections{},
 	}
 }
 
@@ -201,19 +205,24 @@ func (s *Syncer) buildAgwResources(
 		port, _ := strconv.Atoi(object.Key)
 		uniq := sets.New[types.NamespacedName]()
 		for _, gw := range object.Objects {
+			if _, isAdditionalClass := s.additionalGatewayClasses[gw.ParentInfo.ParentGatewayClassName]; isAdditionalClass {
+				continue
+			}
 			uniq.Insert(types.NamespacedName{
 				Namespace: gw.ParentGateway.Namespace,
 				Name:      gw.ParentGateway.Name,
 			})
 		}
-		return slices.Map(uniq.UnsortedList(), func(e types.NamespacedName) agwir.AgwResource {
+		return slices.MapFilter(uniq.UnsortedList(), func(e types.NamespacedName) *agwir.AgwResource {
+
 			bind := translator.AgwBind{
 				Bind: &api.Bind{
 					Key:  object.Key + "/" + e.String(),
 					Port: uint32(port), //nolint:gosec // G115: port is always in valid port range
 				},
 			}
-			return translator.ToResourceForGateway(e, bind)
+			resource := translator.ToResourceForGateway(e, bind)
+			return &resource
 		})
 	}, krtopts.ToOptions("Binds")...)
 	if s.agwPlugins.AddResourceExtension != nil && s.agwPlugins.AddResourceExtension.Binds != nil {
