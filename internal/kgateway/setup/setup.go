@@ -23,7 +23,6 @@ import (
 
 	apisettings "github.com/kgateway-dev/kgateway/v2/api/settings"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/admin"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/controller"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -375,7 +374,7 @@ func (s *setup) Start(ctx context.Context) error {
 		}
 	}
 
-	agw, err := BuildKgatewayWithConfig(
+	controllerBuilder, err := BuildKgatewayWithConfig(
 		ctx, mgr, s.gatewayControllerName, s.agwControllerName, s.gatewayClassName, s.waypointClassName,
 		s.agentgatewayClassName, s.additionalGatewayClasses, setupOpts, s.restConfig,
 		istioClient, commoncol, agwCollections, uccBuilder, s.extraPlugins, s.extraAgwPlugins,
@@ -388,8 +387,14 @@ func (s *setup) Start(ctx context.Context) error {
 		return err
 	}
 
-	if s.agwXdsListener != nil && agw != nil {
-		NewAgwControlPlane(ctx, s.agwXdsListener, authenticators, s.globalSettings.XdsAuth, certWatcher, agw.Registrations...)
+	if s.agwXdsListener != nil && controllerBuilder != nil {
+		// Get the agw syncer and status syncer from the controller builder
+		agwSyncer := controllerBuilder.AgwSyncer()
+		agwStatusSyncer := controllerBuilder.AgwStatusSyncer()
+
+		if agwSyncer != nil && agwStatusSyncer != nil {
+			NewAgwControlPlane(ctx, s.agwXdsListener, authenticators, s.globalSettings.XdsAuth, certWatcher, agwStatusSyncer, agwSyncer.Registrations...)
+		}
 	}
 
 	slog.Info("starting admin server")
@@ -425,7 +430,7 @@ func BuildKgatewayWithConfig(
 	extraGatewayParameters []client.Object,
 	validator validator.Validator,
 	extraAgwPolicyStatusHandlers map[string]agwplugins.AgwPolicyStatusSyncHandler,
-) (*agentgatewaysyncer.Syncer, error) {
+) (*controller.ControllerBuilder, error) {
 	slog.Info("creating krt collections")
 	krtOpts := krtutil.NewKrtOptions(ctx.Done(), setupOpts.KrtDebugger)
 
@@ -470,7 +475,13 @@ func BuildKgatewayWithConfig(
 	slog.Info("waiting for cache sync")
 	kubeClient.RunAndWait(ctx.Done())
 
-	return c.Build(ctx)
+	// Build the controller to initialize everything
+	_, err = c.Build(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return c, nil
 }
 
 // SetupLogging configures the global slog logger

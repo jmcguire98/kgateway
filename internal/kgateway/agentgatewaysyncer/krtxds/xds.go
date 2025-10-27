@@ -48,6 +48,19 @@ import (
 
 var log = logging.New("krtxds")
 
+// NackEvent represents a NACK received from an agentgateway proxy
+type NackEvent struct {
+	Gateway   types.NamespacedName
+	TypeUrl   string
+	ErrorMsg  string
+	Timestamp time.Time
+}
+
+// NackEventHandler handles NACK events from agentgateway proxies
+type NackEventHandler interface {
+	OnNack(event NackEvent)
+}
+
 type CollectionRegistration struct {
 	Start     func(stop <-chan struct{})
 	HasSynced func() bool
@@ -154,6 +167,11 @@ func Collection[T IntoProto[TT], TT proto.Message](collection krt.Collection[T],
 
 // NewDiscoveryServer creates DiscoveryServer that sources data from Pilot's internal mesh data structures
 func NewDiscoveryServer(debugger *krt.DebugHandler, reg ...Registration) *DiscoveryServer {
+	return NewDiscoveryServerWithHandler(debugger, nil, reg...)
+}
+
+// NewDiscoveryServerWithHandler creates DiscoveryServer with optional NACK event handler
+func NewDiscoveryServerWithHandler(debugger *krt.DebugHandler, nackHandler NackEventHandler, reg ...Registration) *DiscoveryServer {
 	out := &DiscoveryServer{
 		concurrentPushLimit: make(chan struct{}, features.PushThrottle),
 		RequestRateLimit:    rate.NewLimiter(rate.Limit(features.RequestLimit), 1),
@@ -164,6 +182,7 @@ func NewDiscoveryServer(debugger *krt.DebugHandler, reg ...Registration) *Discov
 		debugHandlers:       map[string]string{},
 		adsClients:          map[string]*Connection{},
 		krtDebugger:         debugger,
+		nackHandler:         nackHandler,
 		DebounceOptions: DebounceOptions{
 			DebounceAfter: features.DebounceAfter,
 			DebounceMax:   features.DebounceMax,
@@ -223,6 +242,9 @@ type DiscoveryServer struct {
 	krtDebugger   *krt.DebugHandler
 	pushOrder     []string
 	registrations []CollectionRegistration
+
+	// nackHandler handles NACK events from agentgateway proxies
+	nackHandler NackEventHandler
 }
 
 // Proxy contains information about an specific instance of a proxy.
@@ -465,6 +487,18 @@ func (conn *Connection) sendDelta(res *discovery.DeltaDiscoveryResponse) error {
 func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryRequest, con *Connection) error {
 	stype := v3.GetShortType(req.TypeUrl)
 	log.Debug("ADS: REQ resources", "type", stype, "connection", con.ID(), "subscribe", len(req.ResourceNamesSubscribe), "unsubscribe", len(req.ResourceNamesUnsubscribe), "nonce", req.ResponseNonce)
+
+	// Check for NACK and emit event if handler is configured
+	if req.ErrorDetail != nil && s.nackHandler != nil {
+		gateway := kgwxds.AgentgatewayID(con.node)
+		event := NackEvent{
+			Gateway:   gateway,
+			TypeUrl:   req.TypeUrl,
+			ErrorMsg:  req.ErrorDetail.GetMessage(),
+			Timestamp: time.Now(),
+		}
+		s.nackHandler.OnNack(event)
+	}
 
 	shouldRespond := shouldRespondDelta(con, req)
 	if !shouldRespond {

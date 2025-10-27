@@ -137,6 +137,7 @@ func NewAgwControlPlane(
 	authenticators []security.Authenticator,
 	xdsAuth bool,
 	certWatcher *certwatcher.CertWatcher,
+	nackHandler krtxds.NackEventHandler,
 	reg ...krtxds.Registration,
 ) {
 	baseLogger := slog.Default().With("component", "agentgateway-controlplane")
@@ -144,7 +145,7 @@ func NewAgwControlPlane(
 	serverOpts := getGRPCServerOpts(authenticators, xdsAuth, certWatcher, baseLogger)
 	grpcServer := grpc.NewServer(serverOpts...)
 
-	ds := krtxds.NewDiscoveryServer(nil, reg...)
+	ds := krtxds.NewDiscoveryServerWithHandler(nil, nackHandler, reg...)
 	stop := make(chan struct{})
 	context.AfterFunc(ctx, func() {
 		close(stop)
