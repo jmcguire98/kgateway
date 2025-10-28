@@ -1,13 +1,12 @@
 package nack
 
 import (
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/krtutil"
 	"istio.io/istio/pkg/kube/krt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
-
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
-	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/krtutil"
 )
 
 // FilterEventsAndConvertToNackStatusUpdate filters Kubernetes Events to only process NACK/ACK events for Gateways.
@@ -63,58 +62,32 @@ func CreateNackEventCollection(
 	}, opts.ToOptions("NackEvents")...)
 }
 
-// CreateNackStatusCollection creates a KRT collection that computes Gateway status
-// from NACK events. This transforms NACK/ACK events into Gateway status updates
-// that can be fed into the existing Gateway status collection system.
-func CreateNackStatusCollection(
-	nackEvents krt.Collection[NackStatusUpdate],
-	opts krtutil.KrtOptions,
-) krt.Collection[gwv1.GatewayStatus] {
-	// Group NACK events by Gateway for aggregation
-	gatewayIndex := krt.NewIndex(nackEvents, "GatewayNackIndex", func(update NackStatusUpdate) []types.NamespacedName {
-		return []types.NamespacedName{update.Gateway}
-	})
+// ComputeGatewayNackStatus computes whether or not any NACKS are active for a given Gateway.
+func ComputeGatewayNackStatus(ctx krt.HandlerContext, gateway *types.NamespacedName, nackEvents krt.Collection[NackStatusUpdate]) *gwv1.GatewayStatus {
+	gatewayName := types.NamespacedName{
+		Name:      gateway.Name,
+		Namespace: gateway.Namespace,
+	}
 
-	// Track processed NACK IDs to avoid duplicate processing of the same event
-	// TODO: I'm not sure if we still need this, come back to it.
-	processedNacks := make(map[string]bool)
+	allNackUpdates := krt.Fetch(ctx, nackEvents)
 
-	// Create collection that aggregates all NACK events per Gateway into status
-	return krt.NewCollection(nackEvents, func(
-		ctx krt.HandlerContext,
-		update NackStatusUpdate,
-	) *gwv1.GatewayStatus {
-		// Get all NACK events for this Gateway using the index
-		updates := gatewayIndex.Lookup(update.Gateway)
-		if len(updates) == 0 {
-			return nil
+	nackState := GatewayNackState{
+		Gateway:     gatewayName,
+		ActiveNacks: make(map[string]string),
+	}
+
+	for _, update := range allNackUpdates {
+		if update.Gateway != gatewayName {
+			continue
 		}
 
-		// Skip if this specific update was already processed (deduplication)
-		nackKey := update.NackID + ":" + update.Gateway.String()
-		if processedNacks[nackKey] {
-			return nil
+		if update.IsRecovery {
+			nackState.RemoveNack(update.NackID)
+		} else {
+			nackState.AddNack(update.NackID, update.Message)
 		}
-		processedNacks[nackKey] = true
+	}
 
-		// Create aggregate NACK state for this Gateway
-		state := &GatewayNackState{
-			Gateway:     update.Gateway,
-			ActiveNacks: make(map[string]string),
-		}
-
-		// Process all NACK/ACK events for this Gateway
-		for _, u := range updates {
-			if u.IsRecovery {
-				// ACK event - remove the corresponding NACK
-				state.RemoveNack(u.NackID)
-			} else {
-				// NACK event - add to active set
-				state.AddNack(u.NackID, u.Message)
-			}
-		}
-
-		status := state.ComputeStatus()
-		return &status
-	}, opts.ToOptions("GatewayNackStatus")...)
+	status := nackState.ComputeStatus()
+	return status
 }

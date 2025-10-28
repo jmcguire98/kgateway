@@ -18,6 +18,7 @@ import (
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/nack"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/status"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
@@ -105,7 +106,10 @@ func (s *Syncer) buildResourceCollections(krtopts krtutil.KrtOptions) {
 		status.RegisterStatus(s.statusCollections, col, translator.GetStatus)
 	}
 
-	gatewayFinalStatus := s.buildFinalGatewayStatus(gatewayInitialStatus, routeAttachments, krtopts)
+	// Build NACK status collections for agentgateway xDS errors
+	nackEvents := nack.CreateNackEventCollection(s.agwCollections.Events, krtopts)
+
+	gatewayFinalStatus := s.buildFinalGatewayStatus(gatewayInitialStatus, routeAttachments, nackEvents, krtopts)
 	status.RegisterStatus(s.statusCollections, gatewayFinalStatus, translator.GetStatus)
 
 	// Build address collections
@@ -121,6 +125,7 @@ func (s *Syncer) buildResourceCollections(krtopts krtutil.KrtOptions) {
 func (s *Syncer) buildFinalGatewayStatus(
 	gatewayStatuses krt.StatusCollection[*gwv1.Gateway, gwv1.GatewayStatus],
 	routeAttachments krt.Collection[*translator.RouteAttachment],
+	nackEvents krt.Collection[nack.NackStatusUpdate],
 	krtopts krtutil.KrtOptions,
 ) krt.StatusCollection[*gwv1.Gateway, gwv1.GatewayStatus] {
 	routeAttachmentsIndex := krt.NewIndex(routeAttachments, "to", func(o *translator.RouteAttachment) []types.NamespacedName {
@@ -134,11 +139,33 @@ func (s *Syncer) buildFinalGatewayStatus(
 			for _, r := range tcpRoutes {
 				counts[r.ListenerName]++
 			}
+
+			// Start with existing status
 			status := i.Status.DeepCopy()
+
+			// Update route attachment counts
 			for i, s := range status.Listeners {
 				s.AttachedRoutes = counts[string(s.Name)]
 				status.Listeners[i] = s
 			}
+
+			// Compute final status by merging existing status with NACK conditions
+			nackStatus := nack.ComputeGatewayNackStatus(ctx, &types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace}, nackEvents)
+			if nackStatus != nil {
+				// Replace any existing Programmed conditions with NACK-derived ones
+				// TODO: this is gross, clean this up.
+				for _, nackCondition := range nackStatus.Conditions {
+					// Remove any existing condition of the same type
+					for j := len(status.Conditions) - 1; j >= 0; j-- {
+						if status.Conditions[j].Type == nackCondition.Type {
+							status.Conditions = append(status.Conditions[:j], status.Conditions[j+1:]...)
+						}
+					}
+					// Add the new NACK condition
+					status.Conditions = append(status.Conditions, nackCondition)
+				}
+			}
+
 			return &krt.ObjectWithStatus[*gwv1.Gateway, gwv1.GatewayStatus]{
 				Obj:    i.Obj,
 				Status: *status,

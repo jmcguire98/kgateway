@@ -42,6 +42,7 @@ type AgwCollections struct {
 	Secrets        krt.Collection[*corev1.Secret]
 	ConfigMaps     krt.Collection[*corev1.ConfigMap]
 	EndpointSlices krt.Collection[*discovery.EndpointSlice]
+	Events         krt.Collection[*corev1.Event]
 
 	// Gateway API resources
 	GatewayClasses     krt.Collection[*gwv1.GatewayClass]
@@ -236,6 +237,7 @@ func (c *AgwCollections) HasSynced() bool {
 		c.Services != nil && c.Services.HasSynced() &&
 		c.Secrets != nil && c.Secrets.HasSynced() &&
 		c.ConfigMaps != nil && c.ConfigMaps.HasSynced() &&
+		c.Events != nil && c.Events.HasSynced() &&
 		c.GatewayClasses != nil && c.GatewayClasses.HasSynced() &&
 		c.Gateways != nil && c.Gateways.HasSynced() &&
 		c.HTTPRoutes != nil && c.HTTPRoutes.HasSynced() &&
@@ -300,6 +302,9 @@ func NewAgwCollections(
 		EndpointSlices: krt.WrapClient(
 			kclient.NewFiltered[*discovery.EndpointSlice](commoncol.Client, kubetypes.Filter{ObjectFilter: commoncol.Client.ObjectFilter()}),
 			commoncol.KrtOpts.ToOptions("informer/EndpointSlices")...),
+		Events: krt.WrapClient(
+			kclient.NewFiltered[*corev1.Event](commoncol.Client, kubetypes.Filter{ObjectFilter: commoncol.Client.ObjectFilter()}),
+			commoncol.KrtOpts.ToOptions("informer/Events")...),
 
 		// Gateway API resources
 		GatewayClasses:     krt.WrapClient(kclient.NewFilteredDelayed[*gwv1.GatewayClass](commoncol.Client, wellknown.GatewayClassGVR, kubetypes.Filter{ObjectFilter: commoncol.Client.ObjectFilter()}), commoncol.KrtOpts.ToOptions("informer/GatewayClasses")...),
