@@ -48,7 +48,7 @@ import (
 
 var log = logging.New("krtxds")
 
-// NackEvent represents a NACK received from an agentgateway proxy
+// NackEvent represents a NACK received from an agentgateway gateway
 type NackEvent struct {
 	Gateway   types.NamespacedName
 	TypeUrl   string
@@ -56,7 +56,6 @@ type NackEvent struct {
 	Timestamp time.Time
 }
 
-// NackEventHandler handles NACK events from agentgateway proxies
 type NackEventHandler interface {
 	OnNack(event NackEvent)
 }
@@ -165,13 +164,8 @@ func Collection[T IntoProto[TT], TT proto.Message](collection krt.Collection[T],
 	return PerGatewayCollection(collection, nil, krtopts)
 }
 
-// NewDiscoveryServer creates DiscoveryServer that sources data from Pilot's internal mesh data structures
+// NewDiscoveryServer creates a DiscoveryServer for agentgateway that sources data from KRT collections via registered generators
 func NewDiscoveryServer(debugger *krt.DebugHandler, reg ...Registration) *DiscoveryServer {
-	return NewDiscoveryServerWithHandler(debugger, nil, reg...)
-}
-
-// NewDiscoveryServerWithHandler creates DiscoveryServer with optional NACK event handler
-func NewDiscoveryServerWithHandler(debugger *krt.DebugHandler, nackHandler NackEventHandler, reg ...Registration) *DiscoveryServer {
 	out := &DiscoveryServer{
 		concurrentPushLimit: make(chan struct{}, features.PushThrottle),
 		RequestRateLimit:    rate.NewLimiter(rate.Limit(features.RequestLimit), 1),
@@ -182,7 +176,8 @@ func NewDiscoveryServerWithHandler(debugger *krt.DebugHandler, nackHandler NackE
 		debugHandlers:       map[string]string{},
 		adsClients:          map[string]*Connection{},
 		krtDebugger:         debugger,
-		nackHandler:         nackHandler,
+		// TODO(krt) add nack handler
+		nackHandler: nil,
 		DebounceOptions: DebounceOptions{
 			DebounceAfter: features.DebounceAfter,
 			DebounceMax:   features.DebounceMax,
@@ -243,7 +238,6 @@ type DiscoveryServer struct {
 	pushOrder     []string
 	registrations []CollectionRegistration
 
-	// nackHandler handles NACK events from agentgateway proxies
 	nackHandler NackEventHandler
 }
 

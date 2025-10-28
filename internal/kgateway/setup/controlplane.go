@@ -145,7 +145,7 @@ func NewAgwControlPlane(
 	serverOpts := getGRPCServerOpts(authenticators, xdsAuth, certWatcher, baseLogger)
 	grpcServer := grpc.NewServer(serverOpts...)
 
-	ds := krtxds.NewDiscoveryServerWithHandler(nil, nackHandler, reg...)
+	ds := krtxds.NewDiscoveryServer(nil, reg...)
 	stop := make(chan struct{})
 	context.AfterFunc(ctx, func() {
 		close(stop)
