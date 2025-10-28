@@ -2,7 +2,6 @@ package agentgatewaysyncer
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"istio.io/istio/pkg/kube/controllers"
 	"istio.io/istio/pkg/kube/kclient"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -20,7 +18,6 @@ import (
 	gwxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/krtxds"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/status"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -58,9 +55,6 @@ type AgentGwStatusSyncer struct {
 	grpcRoutes   StatusSyncer[*gwv1.GRPCRoute, *gwv1.GRPCRouteStatus]
 	tcpRoutes    StatusSyncer[*gwv1alpha2.TCPRoute, *gwv1alpha2.TCPRouteStatus]
 	tlsRoutes    StatusSyncer[*gwv1alpha2.TLSRoute, *gwv1alpha2.TLSRouteStatus]
-
-	// NACK event handling
-	nackEventChan chan krtxds.NackEvent
 }
 
 func NewAgwStatusSyncer(
@@ -77,7 +71,6 @@ func NewAgwStatusSyncer(
 		client:            client,
 		statusCollections: statusCollections,
 		cacheSyncs:        cacheSyncs,
-		nackEventChan:     make(chan krtxds.NackEvent, 100), // Buffered channel for NACK events
 
 		trafficPolicies: StatusSyncer[*v1alpha1.TrafficPolicy, *gwv1.PolicyStatus]{
 			name:   "trafficPolicy",
@@ -185,9 +178,6 @@ func (s *AgentGwStatusSyncer) Start(ctx context.Context) error {
 	nq := s.NewStatusWorker(ctx)
 	s.statusCollections.SetQueue(nq)
 
-	// Start NACK event processor
-	go s.processNackEvents(ctx)
-
 	<-ctx.Done()
 	return nil
 }
@@ -263,97 +253,6 @@ func (s StatusSyncer[O, S]) ApplyStatus(ctx context.Context, obj status.Resource
 	} else {
 		logger.Debug("updated policy status")
 	}
-}
-
-// OnNack handles NACK events from agentgateway proxies
-func (s *AgentGwStatusSyncer) OnNack(event krtxds.NackEvent) {
-	select {
-	case s.nackEventChan <- event:
-		// Successfully queued the event
-	default:
-		// Channel is full, log and drop the event
-		logger.Warn("NACK event channel full, dropping event", "gateway", event.Gateway.String(), "error", event.ErrorMsg)
-	}
-}
-
-// processNackEvents processes NACK events and updates gateway status conditions
-func (s *AgentGwStatusSyncer) processNackEvents(ctx context.Context) {
-	logger.Info("starting NACK event processor")
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("stopping NACK event processor")
-			return
-		case event := <-s.nackEventChan:
-			s.handleNackEvent(ctx, event)
-		}
-	}
-}
-
-// handleNackEvent processes a single NACK event and updates the gateway status
-func (s *AgentGwStatusSyncer) handleNackEvent(ctx context.Context, event krtxds.NackEvent) {
-	logger := logger.With(
-		"gateway", event.Gateway.String(),
-		"type_url", event.TypeUrl,
-		"error", event.ErrorMsg,
-	)
-
-	logger.Warn("processing NACK event for gateway")
-
-	// Get the current gateway to update its status
-	gw := s.gateways.client.Get(event.Gateway.Name, event.Gateway.Namespace)
-	if gw == nil {
-		logger.Error("failed to get gateway for NACK status update: gateway not found")
-		return
-	}
-
-	// Create a new status with the NACK condition
-	newStatus := gw.Status.DeepCopy()
-
-	// Find existing Programmed condition or create a new one
-	existingCondition := meta.FindStatusCondition(newStatus.Conditions, string(gwv1.GatewayConditionProgrammed))
-
-	nackCondition := metav1.Condition{
-		Type:               string(gwv1.GatewayConditionProgrammed),
-		Status:             metav1.ConditionFalse,
-		Reason:             "ConfigurationError",
-		Message:            fmt.Sprintf("Configuration rejected by proxy: %s", event.ErrorMsg),
-		LastTransitionTime: metav1.Now(),
-		ObservedGeneration: gw.Generation,
-	}
-
-	if existingCondition != nil {
-		// Only update if the condition actually changed
-		if existingCondition.Status != nackCondition.Status ||
-		   existingCondition.Reason != nackCondition.Reason ||
-		   existingCondition.Message != nackCondition.Message {
-			meta.SetStatusCondition(&newStatus.Conditions, nackCondition)
-		} else {
-			logger.Debug("gateway condition already reflects NACK state, skipping update")
-			return
-		}
-	} else {
-		meta.SetStatusCondition(&newStatus.Conditions, nackCondition)
-	}
-
-	// Create a gateway object with updated status for the API call
-	updatedGateway := &gwv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            gw.Name,
-			Namespace:       gw.Namespace,
-			ResourceVersion: gw.ResourceVersion,
-		},
-		Status: *newStatus,
-	}
-
-	// Update the gateway status
-	_, err := s.gateways.client.UpdateStatus(updatedGateway)
-	if err != nil {
-		logger.Error("failed to update gateway status for NACK event", logKeyError, err)
-		return
-	}
-
-	logger.Info("successfully updated gateway status for NACK event")
 }
 
 // NeedLeaderElection returns true to ensure that the AgentGwStatusSyncer runs only on the leader

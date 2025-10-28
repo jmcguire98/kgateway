@@ -46,7 +46,7 @@ func NewFakeDiscoveryServer(t *testing.T, initialAddress ...agentgatewaysyncer.A
 		krtxds.PerGatewayCollection[agwir.AgwResource, *api.Resource](xdsResource, agwResourcesByGateway, opts),
 	}
 
-	s := krtxds.NewDiscoveryServer(opts.Debugger, reg...)
+	s := krtxds.NewDiscoveryServer(opts.Debugger, nil, reg...)
 	s.Start(stop)
 	xdsAddress.WaitUntilSynced(stop)
 	xdsResource.WaitUntilSynced(stop)

@@ -393,7 +393,7 @@ func (s *setup) Start(ctx context.Context) error {
 		agwStatusSyncer := controllerBuilder.AgwStatusSyncer()
 
 		if agwSyncer != nil && agwStatusSyncer != nil {
-			NewAgwControlPlane(ctx, s.agwXdsListener, authenticators, s.globalSettings.XdsAuth, certWatcher, agwStatusSyncer, agwSyncer.Registrations...)
+			NewAgwControlPlane(ctx, s.agwXdsListener, authenticators, s.globalSettings.XdsAuth, certWatcher, agwSyncer.GetNackPublisher(), agwSyncer.Registrations...)
 		}
 	}
 

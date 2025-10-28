@@ -35,10 +35,10 @@ const (
 
 // ComputeNackID creates a stable, identifier for a NACK event.
 // The same combination of inputs will always produce the same NACK ID.
-func ComputeNackID(gatewayNamespacedName, typeURL, version, code, message string) string {
+func ComputeNackID(gatewayNamespacedName, typeURL string) string {
 	h := sha256.New()
 
-	input := strings.Join([]string{gatewayNamespacedName, typeURL, version, code, message}, "|")
+	input := strings.Join([]string{gatewayNamespacedName, typeURL}, "|")
 
 	h.Write([]byte(input))
 

@@ -61,6 +61,9 @@ type Syncer struct {
 	waitForSync []cache.InformerSynced
 	ready       atomic.Bool
 
+	// NACK handling
+	nackPublisher *nack.Publisher
+
 	// features
 	Registrations []krtxds.Registration
 }
@@ -86,6 +89,10 @@ func (s *Syncer) Init(krtopts krtutil.KrtOptions) {
 
 	s.translator.Init()
 	s.buildResourceCollections(krtopts)
+}
+
+func (s *Syncer) GetNackPublisher() *nack.Publisher {
+	return s.nackPublisher
 }
 
 func (s *Syncer) StatusCollections() *status.StatusCollections {
@@ -483,6 +490,7 @@ func (s *Syncer) setupSyncDependencies(
 
 func (s *Syncer) Start(ctx context.Context) error {
 	logger.Info("starting agentgateway Syncer", "controllername", s.controllerName)
+
 	logger.Info("waiting for agentgateway cache to sync")
 
 	// wait for krt collections to sync
@@ -494,6 +502,8 @@ func (s *Syncer) Start(ctx context.Context) error {
 	)
 
 	logger.Info("caches warm!")
+
+	s.nackPublisher = nack.NewPublisher(ctx, s.client)
 
 	s.ready.Store(true)
 	<-ctx.Done()
