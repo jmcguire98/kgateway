@@ -503,7 +503,7 @@ func (s *Syncer) Start(ctx context.Context) error {
 
 	logger.Info("caches warm!")
 
-	s.nackPublisher = nack.NewPublisher(ctx, s.client)
+	s.nackPublisher = nack.NewPublisher(ctx, s.client, s.agwCollections.SystemNamespace)
 
 	s.ready.Store(true)
 	<-ctx.Done()

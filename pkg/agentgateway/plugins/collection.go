@@ -211,6 +211,21 @@ func registerGatewayAPITypes() {
 			return c.GatewayAPI().GatewayV1alpha2().TLSRoutes(namespace)
 		},
 	)
+	// todo: this should probably be in its own register function.
+	// Register Event type for NACK status tracking
+	kubeclient.Register[*corev1.Event](
+		wellknown.EventGVR,
+		wellknown.EventGVK,
+		func(c kubeclient.ClientGetter, ns string, o metav1.ListOptions) (runtime.Object, error) {
+			return c.Kube().CoreV1().Events(ns).List(context.Background(), o)
+		},
+		func(c kubeclient.ClientGetter, ns string, o metav1.ListOptions) (watch.Interface, error) {
+			return c.Kube().CoreV1().Events(ns).Watch(context.Background(), o)
+		},
+		func(c kubeclient.ClientGetter, ns string) kubetypes.WriteAPI[*corev1.Event] {
+			return c.Kube().CoreV1().Events(ns)
+		},
+	)
 }
 
 func registerInferenceExtensionTypes(client istiokube.Client) {
@@ -268,7 +283,6 @@ func NewAgwCollections(
 	registerGatewayAPITypes()
 	registerInferenceExtensionTypes(commoncol.Client)
 	registerKgwResources(commoncol.OurClient)
-
 	agwCollections := &AgwCollections{
 		Client:          commoncol.Client,
 		ControllerName:  agwControllerName,
@@ -302,8 +316,12 @@ func NewAgwCollections(
 		EndpointSlices: krt.WrapClient(
 			kclient.NewFiltered[*discovery.EndpointSlice](commoncol.Client, kubetypes.Filter{ObjectFilter: commoncol.Client.ObjectFilter()}),
 			commoncol.KrtOpts.ToOptions("informer/EndpointSlices")...),
+		// we only want to watch events in the system namespace (that we control) to avoid performance issues.
+		// todo: we could probably tighten this further with a field selector for the involved object being of kind Gateway. (overkill/)
 		Events: krt.WrapClient(
-			kclient.NewFiltered[*corev1.Event](commoncol.Client, kubetypes.Filter{ObjectFilter: commoncol.Client.ObjectFilter()}),
+			kclient.NewFiltered[*corev1.Event](commoncol.Client, kubetypes.Filter{
+				Namespace: systemNamespace,
+			}),
 			commoncol.KrtOpts.ToOptions("informer/Events")...),
 
 		// Gateway API resources

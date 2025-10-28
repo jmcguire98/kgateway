@@ -18,16 +18,18 @@ var log = logging.New("nack/publisher")
 
 // Publisher converts NACK events from the agentgateway xDS server into Kubernetes Events.
 type Publisher struct {
-	ctx    context.Context
-	client kube.Client
+	ctx             context.Context
+	client          kube.Client
+	systemNamespace string
 }
 
 // NewPublisher creates a new NACK event publisher that will publish Events
-// using the provided Kubernetes client.
-func NewPublisher(ctx context.Context, client kube.Client) *Publisher {
+// using the provided Kubernetes client in the specified system namespace.
+func NewPublisher(ctx context.Context, client kube.Client, systemNamespace string) *Publisher {
 	return &Publisher{
-		client: client,
-		ctx:    ctx,
+		client:          client,
+		ctx:             ctx,
+		systemNamespace: systemNamespace,
 	}
 }
 
@@ -42,7 +44,7 @@ func (p *Publisher) OnNack(event krtxds.NackEvent) {
 	k8sEvent := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "agentgateway-nack-",
-			Namespace:    event.Gateway.Namespace,
+			Namespace:    p.systemNamespace,
 			Annotations: map[string]string{
 				AnnotationNackID:     nackID,
 				AnnotationTypeURL:    event.TypeUrl,
@@ -67,7 +69,7 @@ func (p *Publisher) OnNack(event krtxds.NackEvent) {
 		ReportingController: wellknown.DefaultAgwControllerName,
 	}
 
-	_, err := p.client.Kube().CoreV1().Events(event.Gateway.Namespace).Create(
+	_, err := p.client.Kube().CoreV1().Events(p.systemNamespace).Create(
 		p.ctx, k8sEvent, metav1.CreateOptions{},
 	)
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -89,7 +91,7 @@ func (p *Publisher) OnAck(event krtxds.AckEvent) {
 	k8sEvent := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "agentgateway-ack-",
-			Namespace:    event.Gateway.Namespace,
+			Namespace:    p.systemNamespace,
 			Annotations: map[string]string{
 				AnnotationNackID:     ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl),
 				AnnotationTypeURL:    event.TypeUrl,
@@ -112,7 +114,7 @@ func (p *Publisher) OnAck(event krtxds.AckEvent) {
 		ReportingController: wellknown.DefaultAgwControllerName,
 	}
 
-	_, err := p.client.Kube().CoreV1().Events(event.Gateway.Namespace).Create(
+	_, err := p.client.Kube().CoreV1().Events(p.systemNamespace).Create(
 		p.ctx, k8sEvent, metav1.CreateOptions{},
 	)
 	if err != nil && !errors.IsAlreadyExists(err) {

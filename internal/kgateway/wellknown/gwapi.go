@@ -151,6 +151,18 @@ var (
 		Version:  apixv1alpha1.GroupVersion.Version,
 		Resource: "xlistenersets",
 	}
+
+	// Core Kubernetes API resources
+	EventGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "events",
+	}
+	EventGVK = schema.GroupVersionKind{
+		Group:   "",
+		Version: "v1",
+		Kind:    "Event",
+	}
 )
 
 // IsInferencePoolGK returns true if the given group and kind match
