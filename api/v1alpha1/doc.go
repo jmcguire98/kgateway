@@ -37,4 +37,4 @@ package v1alpha1
 
 // Leases for leader election
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;create;update
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;patch
