@@ -470,34 +470,7 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 	stype := v3.GetShortType(req.TypeUrl)
 	log.Debug("ADS: REQ resources", "type", stype, "connection", con.ID(), "subscribe", len(req.ResourceNamesSubscribe), "unsubscribe", len(req.ResourceNamesUnsubscribe), "nonce", req.ResponseNonce)
 
-	// TODO: this code should probably be moved to shouldRespondDelta, and pass in the nack handler as a parameter.
-	// if we need to.
-	if req.ErrorDetail != nil && s.nackHandler != nil {
-		gateway := kgwxds.AgentgatewayID(con.node)
-		nackEvent := nack.NackEvent{
-			Gateway:   gateway,
-			TypeUrl:   req.TypeUrl,
-			ErrorMsg:  req.ErrorDetail.GetMessage(),
-			Timestamp: time.Now(),
-		}
-		s.nackHandler.HandleNack(&nackEvent)
-	}
-	// Check for ACK that resolves a previous NACK before processing the request
-	if req.ErrorDetail == nil && s.nackHandler != nil && req.ResponseNonce != "" {
-		// Check if there was a previous error for this type
-		previousInfo := con.proxy.GetWatchedResource(req.TypeUrl)
-		if previousInfo != nil && previousInfo.LastError != "" {
-			gateway := kgwxds.AgentgatewayID(con.node)
-			ackEvent := nack.AckEvent{
-				Gateway:   gateway,
-				TypeUrl:   req.TypeUrl,
-				Timestamp: time.Now(),
-			}
-			s.nackHandler.HandleAck(&ackEvent)
-		}
-	}
-
-	shouldRespond := shouldRespondDelta(con, req)
+	shouldRespond := shouldRespondDelta(con, req, s.nackHandler)
 	if !shouldRespond {
 		log.Debug("no response needed")
 		return nil
@@ -522,7 +495,7 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 
 // shouldRespondDelta determines whether this request needs to be responded back. It applies the ack/nack rules as per xds protocol
 // using WatchedResource for previous state and discovery request for the current state.
-func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryRequest) bool {
+func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryRequest, nackHandler *nack.NackHandler) bool {
 	stype := v3.GetShortType(request.TypeUrl)
 
 	// If there is an error in request that means previous response is erroneous.
@@ -537,6 +510,17 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 			wr.LastError = request.ErrorDetail.GetMessage()
 			return wr
 		})
+
+		if nackHandler != nil {
+			gateway := kgwxds.AgentgatewayID(con.node)
+			nackEvent := nack.NackEvent{
+				Gateway:   gateway,
+				TypeUrl:   request.TypeUrl,
+				ErrorMsg:  request.ErrorDetail.GetMessage(),
+				Timestamp: time.Now(),
+			}
+			nackHandler.HandleNack(&nackEvent)
+		}
 		return false
 	}
 
@@ -589,11 +573,14 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 
 	var alwaysRespond bool
 	var subChanged bool
+	var hadPreviousError bool
 
 	// Update resource names, and record ACK if required.
 	con.proxy.UpdateWatchedResource(request.TypeUrl, func(wr *model.WatchedResource) *model.WatchedResource {
 		wr.ResourceNames, _, subChanged = deltaWatchedResources(wr.ResourceNames, request)
 		if !spontaneousReq {
+			// Check if there was a previous error before clearing it
+			hadPreviousError = wr.LastError != ""
 			// Clear last error, we got an ACK.
 			// Otherwise, this is just a change in resource subscription, so leave the last ACK info in place.
 			wr.LastError = ""
@@ -603,6 +590,17 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 		wr.AlwaysRespond = false
 		return wr
 	})
+
+	// Handle ACK event if we cleared a previous error
+	if !spontaneousReq && hadPreviousError && nackHandler != nil && request.ResponseNonce != "" {
+		gateway := kgwxds.AgentgatewayID(con.node)
+		ackEvent := nack.AckEvent{
+			Gateway:   gateway,
+			TypeUrl:   request.TypeUrl,
+			Timestamp: time.Now(),
+		}
+		nackHandler.HandleAck(&ackEvent)
+	}
 
 	// It is invalid in the below two cases:
 	// 1. no subscribed resources change from spontaneous delta request.
