@@ -177,7 +177,7 @@ func (s *Syncer) buildFinalGatewayStatus(
 					logger.Warn("failed to filter nack/ack events and update state", "error", err)
 				}
 			}
-			nackCondition := s.NackHandler.ComputeStatus(&types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace})
+			nackCondition := s.NackHandler.ComputeStatus(types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace})
 			if nackCondition != nil {
 				for i := 0; i < len(status.Conditions); i++ {
 					condition := &status.Conditions[i]

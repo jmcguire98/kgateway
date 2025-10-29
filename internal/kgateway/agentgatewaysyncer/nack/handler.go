@@ -15,7 +15,7 @@ import (
 var nackHandlerLog = logging.New("nack/handler")
 
 type NackHandler struct {
-	nackStateStore map[*types.NamespacedName]map[string]string
+	nackStateStore map[types.NamespacedName]map[string]string
 	nackPublisher  *Publisher
 	mu             sync.RWMutex
 }
@@ -38,7 +38,7 @@ type AckEvent struct {
 
 func NewNackHandler(nackPublisher *Publisher) *NackHandler {
 	return &NackHandler{
-		nackStateStore: make(map[*types.NamespacedName]map[string]string),
+		nackStateStore: make(map[types.NamespacedName]map[string]string),
 		nackPublisher:  nackPublisher,
 		mu:             sync.RWMutex{},
 	}
@@ -76,10 +76,10 @@ func (h *NackHandler) FilterEventsAndUpdateState(event *corev1.Event) error {
 		if !hasRecovery || recoveryOf == "" {
 			return fmt.Errorf("ACK event missing recovery annotation: %v", event.Annotations)
 		}
-		h.removeNack(&types.NamespacedName{Name: event.InvolvedObject.Name, Namespace: event.InvolvedObject.Namespace}, recoveryOf)
+		h.removeNack(types.NamespacedName{Name: event.InvolvedObject.Name, Namespace: event.InvolvedObject.Namespace}, recoveryOf)
 		return nil
 	}
-	h.addNack(&types.NamespacedName{Name: event.InvolvedObject.Name, Namespace: event.InvolvedObject.Namespace}, nackID, event.Message)
+	h.addNack(types.NamespacedName{Name: event.InvolvedObject.Name, Namespace: event.InvolvedObject.Namespace}, nackID, event.Message)
 	return nil
 }
 
@@ -87,7 +87,7 @@ func (h *NackHandler) FilterEventsAndUpdateState(event *corev1.Event) error {
 // - No active NACKs: No status returned
 // - One active NACK: Programmed=False with specific error message
 // - Multiple active NACKs: Programmed=False with aggregated error count
-func (h *NackHandler) ComputeStatus(gateway *types.NamespacedName) *metav1.Condition {
+func (h *NackHandler) ComputeStatus(gateway types.NamespacedName) *metav1.Condition {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	activeNacks := h.nackStateStore[gateway]
@@ -116,7 +116,7 @@ func (h *NackHandler) ComputeStatus(gateway *types.NamespacedName) *metav1.Condi
 }
 
 // addNack adds a NACK to the Gateway's active NACK set when a NACK event is received via the Kubernetes Event API.
-func (h *NackHandler) addNack(gateway *types.NamespacedName, nackID, message string) {
+func (h *NackHandler) addNack(gateway types.NamespacedName, nackID, message string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.nackStateStore[gateway] == nil {
@@ -126,7 +126,7 @@ func (h *NackHandler) addNack(gateway *types.NamespacedName, nackID, message str
 }
 
 // removeNack removes a NACK from the Gateway's active set when an ACK event is received via the Kubernetes Event API.
-func (h *NackHandler) removeNack(gateway *types.NamespacedName, nackID string) {
+func (h *NackHandler) removeNack(gateway types.NamespacedName, nackID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.nackStateStore[gateway] == nil {
