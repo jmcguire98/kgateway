@@ -211,7 +211,10 @@ func registerGatewayAPITypes() {
 			return c.GatewayAPI().GatewayV1alpha2().TLSRoutes(namespace)
 		},
 	)
-	// todo: this should probably be in its own register function.
+
+}
+
+func registerAdditionalCoreTypes() {
 	// Register Event type for NACK status tracking
 	kubeclient.Register[*corev1.Event](
 		wellknown.EventGVR,
@@ -281,6 +284,7 @@ func NewAgwCollections(
 ) (*AgwCollections, error) {
 	// Register Gateway API and kgateway types with Istio kubeclient system
 	registerGatewayAPITypes()
+	registerAdditionalCoreTypes()
 	registerInferenceExtensionTypes(commoncol.Client)
 	registerKgwResources(commoncol.OurClient)
 	agwCollections := &AgwCollections{
