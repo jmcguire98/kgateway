@@ -113,7 +113,6 @@ func (s *Syncer) buildResourceCollections(krtopts krtutil.KrtOptions) {
 		status.RegisterStatus(s.statusCollections, col, translator.GetStatus)
 	}
 
-	// Build final gateway status
 	gatewayFinalStatus := s.buildFinalGatewayStatus(gatewayInitialStatus, routeAttachments, s.agwCollections.Events, krtopts)
 	status.RegisterStatus(s.statusCollections, gatewayFinalStatus, translator.GetStatus)
 
@@ -137,7 +136,7 @@ func (s *Syncer) buildFinalGatewayStatus(
 		return []types.NamespacedName{o.To}
 	})
 
-	// Create an index of Events by Gateway to ensure status recomputation when NACK/ACK events change
+	// Create an index of Events by Gateway for use in filtering NACK/ACK events
 	eventsIndex := krt.NewIndex(events, "gateway", func(event *corev1.Event) []types.NamespacedName {
 		if event.InvolvedObject.Kind == wellknown.GatewayKind &&
 			(event.Reason == nack.ReasonNack || event.Reason == nack.ReasonAck) {
@@ -157,10 +156,8 @@ func (s *Syncer) buildFinalGatewayStatus(
 				counts[r.ListenerName]++
 			}
 
-			// Start with existing status
 			status := i.Status.DeepCopy()
 
-			// Update route attachment counts
 			for i, s := range status.Listeners {
 				s.AttachedRoutes = counts[string(s.Name)]
 				status.Listeners[i] = s
@@ -505,7 +502,6 @@ func (s *Syncer) setupSyncDependencies(
 
 func (s *Syncer) Start(ctx context.Context) error {
 	logger.Info("starting agentgateway Syncer", "controllername", s.controllerName)
-
 	logger.Info("waiting for agentgateway cache to sync")
 
 	// wait for krt collections to sync

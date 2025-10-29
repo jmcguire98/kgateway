@@ -491,7 +491,6 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 			ackEvent := nack.AckEvent{
 				Gateway:   gateway,
 				TypeUrl:   req.TypeUrl,
-				Version:   req.ResponseNonce, // Using nonce as version identifier
 				Timestamp: time.Now(),
 			}
 			s.nackHandler.HandleAck(&ackEvent)

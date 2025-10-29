@@ -20,12 +20,6 @@ const (
 	// AnnotationTypeURL is the xDS TypeURL that was rejected
 	AnnotationTypeURL = "kgateway.dev/type-url"
 
-	// AnnotationVersion is the configuration version that was rejected
-	AnnotationVersion = "kgateway.dev/version"
-
-	// AnnotationResourceNames is a comma-separated list of resource names that were rejected
-	AnnotationResourceNames = "kgateway.dev/resource-names"
-
 	// AnnotationObservedAt is the RFC3339 timestamp when the NACK was last observed
 	AnnotationObservedAt = "kgateway.dev/observed-at"
 

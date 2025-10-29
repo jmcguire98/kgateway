@@ -22,8 +22,7 @@ type Publisher struct {
 	systemNamespace string
 }
 
-// NewPublisher creates a new NACK event publisher that will publish Events
-// using the provided Kubernetes client in the specified system namespace.
+// NewPublisher creates a new NACK event publisher that will publish k8s events
 func NewPublisher(ctx context.Context, client kube.Client, systemNamespace string) *Publisher {
 	return &Publisher{
 		client:          client,
@@ -32,11 +31,9 @@ func NewPublisher(ctx context.Context, client kube.Client, systemNamespace strin
 	}
 }
 
-// OnNack publishes a NACK event as a Kubernetes Event.
-// It converts a NACK event from the xDS server into a Kubernetes Event
+// onNack publishes a NACK event as a k8s event.
 func (p *Publisher) onNack(event NackEvent) {
 
-	// TODO: check if version / code is available from the event and if not remove the params from ComputeNackID
 	nackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
 
 	k8sEvent := &corev1.Event{
@@ -74,8 +71,7 @@ func (p *Publisher) onNack(event NackEvent) {
 	log.Debug("Published NACK event for Gateway", "gateway", event.Gateway, "nackID", nackID, "typeURL", event.TypeUrl)
 }
 
-// OnAck publishes an ACK event as a Kubernetes Event.
-// It converts an ACK event from the xDS server into a Kubernetes Event
+// onAck publishes an ACK event as a k8s event.
 func (p *Publisher) onAck(event AckEvent) {
 	recoveredNackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
 
@@ -86,7 +82,6 @@ func (p *Publisher) onAck(event AckEvent) {
 			Annotations: map[string]string{
 				AnnotationNackID:     ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl),
 				AnnotationTypeURL:    event.TypeUrl,
-				AnnotationVersion:    event.Version,
 				AnnotationRecoveryOf: recoveredNackID,
 				AnnotationObservedAt: event.Timestamp.Format(time.RFC3339),
 			},
@@ -113,5 +108,5 @@ func (p *Publisher) onAck(event AckEvent) {
 		return
 	}
 
-	log.Debug("Published ACK event for Gateway", "gateway", event.Gateway, "typeURL", event.TypeUrl, "version", event.Version)
+	log.Debug("Published ACK event for Gateway", "gateway", event.Gateway, "typeURL", event.TypeUrl)
 }

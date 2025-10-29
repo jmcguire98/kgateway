@@ -32,7 +32,6 @@ type NackEvent struct {
 type AckEvent struct {
 	Gateway   types.NamespacedName
 	TypeUrl   string
-	Version   string
 	Timestamp time.Time
 }
 
