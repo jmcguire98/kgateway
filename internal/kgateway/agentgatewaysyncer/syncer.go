@@ -81,6 +81,7 @@ func NewAgwSyncer(
 		translator:        translator.NewAgwTranslator(agwCollections),
 		client:            client,
 		statusCollections: &status.StatusCollections{},
+		nackPublisher:     nack.NewPublisher(context.Background(), client, agwCollections.SystemNamespace),
 	}
 }
 
@@ -502,8 +503,6 @@ func (s *Syncer) Start(ctx context.Context) error {
 	)
 
 	logger.Info("caches warm!")
-
-	s.nackPublisher = nack.NewPublisher(ctx, s.client, s.agwCollections.SystemNamespace)
 
 	s.ready.Store(true)
 	<-ctx.Done()
