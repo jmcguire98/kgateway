@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"context"
-	"fmt"
 
 	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/config/schema/gvr"
@@ -23,7 +22,6 @@ import (
 	gwxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/nack"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	kgwversioned "github.com/kgateway-dev/kgateway/v2/pkg/client/clientset/versioned"
@@ -318,10 +316,10 @@ func NewAgwCollections(
 		EndpointSlices: krt.WrapClient(
 			kclient.NewFiltered[*discovery.EndpointSlice](commoncol.Client, kubetypes.Filter{ObjectFilter: commoncol.Client.ObjectFilter()}),
 			commoncol.KrtOpts.ToOptions("informer/EndpointSlices")...),
-		// we only want to watch events that we created (AgentgatewayNACK/AgentgatewayACK) to avoid performance issues.
+		// Watch all Gateway-related events, then filter client-side for NACK/ACK events to avoid performance issues.
 		Events: krt.WrapClient(
 			kclient.NewFiltered[*corev1.Event](commoncol.Client, kubetypes.Filter{
-				FieldSelector: fmt.Sprintf("reason=%s,reason=%s", nack.ReasonNack, nack.ReasonAck),
+				FieldSelector: "involvedObject.kind=Gateway",
 			}),
 			commoncol.KrtOpts.ToOptions("informer/Events")...),
 

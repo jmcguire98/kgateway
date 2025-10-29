@@ -114,10 +114,8 @@ func (s *Syncer) buildResourceCollections(krtopts krtutil.KrtOptions) {
 		status.RegisterStatus(s.statusCollections, col, translator.GetStatus)
 	}
 
-	// Build NACK status collections for agentgateway xDS errors
-	nackEvents := nack.CreateNackEventCollection(s.agwCollections.Events, krtopts)
-
-	gatewayFinalStatus := s.buildFinalGatewayStatus(gatewayInitialStatus, routeAttachments, nackEvents, krtopts)
+	// Build final gateway status
+	gatewayFinalStatus := s.buildFinalGatewayStatus(gatewayInitialStatus, routeAttachments, s.agwCollections.Events, krtopts)
 	status.RegisterStatus(s.statusCollections, gatewayFinalStatus, translator.GetStatus)
 
 	// Build address collections
@@ -133,7 +131,7 @@ func (s *Syncer) buildResourceCollections(krtopts krtutil.KrtOptions) {
 func (s *Syncer) buildFinalGatewayStatus(
 	gatewayStatuses krt.StatusCollection[*gwv1.Gateway, gwv1.GatewayStatus],
 	routeAttachments krt.Collection[*translator.RouteAttachment],
-	nackEvents krt.Collection[nack.NackStatusUpdate],
+	events krt.Collection[*corev1.Event],
 	krtopts krtutil.KrtOptions,
 ) krt.StatusCollection[*gwv1.Gateway, gwv1.GatewayStatus] {
 	routeAttachmentsIndex := krt.NewIndex(routeAttachments, "to", func(o *translator.RouteAttachment) []types.NamespacedName {
@@ -157,8 +155,8 @@ func (s *Syncer) buildFinalGatewayStatus(
 				status.Listeners[i] = s
 			}
 
-			// Compute final status by merging existing status with NACK conditions
-			nackStatus := nack.ComputeGatewayNackStatus(ctx, &types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace}, nackEvents)
+			allEvents := krt.Fetch(ctx, events)
+			nackStatus := nack.ComputeGatewayNackStatusFromEvents(ctx, &types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace}, allEvents)
 			if nackStatus != nil {
 				// Replace any existing Programmed conditions with NACK-derived ones
 				// TODO: this is gross, clean this up.
