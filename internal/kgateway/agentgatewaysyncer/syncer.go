@@ -84,7 +84,7 @@ func NewAgwSyncer(
 		client:            client,
 		statusCollections: &status.StatusCollections{},
 		//todo, we definitely shouldn't need to use the background context here
-		NackHandler: nack.NewNackHandler(nack.NewPublisher(context.Background(), client, agwCollections.SystemNamespace)),
+		NackHandler: nack.NewNackHandler(nack.NewPublisher(context.Background(), client)),
 	}
 }
 

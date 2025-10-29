@@ -17,17 +17,15 @@ var log = logging.New("nack/publisher")
 
 // Publisher converts NACK events from the agentgateway xDS server into Kubernetes Events.
 type Publisher struct {
-	ctx             context.Context
-	client          kube.Client
-	systemNamespace string
+	ctx    context.Context
+	client kube.Client
 }
 
 // NewPublisher creates a new NACK event publisher that will publish k8s events
-func NewPublisher(ctx context.Context, client kube.Client, systemNamespace string) *Publisher {
+func NewPublisher(ctx context.Context, client kube.Client) *Publisher {
 	return &Publisher{
-		client:          client,
-		ctx:             ctx,
-		systemNamespace: systemNamespace,
+		client: client,
+		ctx:    ctx,
 	}
 }
 
