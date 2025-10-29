@@ -3,6 +3,7 @@ package agentgatewaysyncer
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"sync/atomic"
 
@@ -20,6 +21,7 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/nack"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/status"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/krtxds"
@@ -134,6 +136,18 @@ func (s *Syncer) buildFinalGatewayStatus(
 	routeAttachmentsIndex := krt.NewIndex(routeAttachments, "to", func(o *translator.RouteAttachment) []types.NamespacedName {
 		return []types.NamespacedName{o.To}
 	})
+
+	// Create an index of Events by Gateway to ensure status recomputation when NACK/ACK events change
+	eventsIndex := krt.NewIndex(events, "gateway", func(event *corev1.Event) []types.NamespacedName {
+		if event.InvolvedObject.Kind == wellknown.GatewayKind &&
+			(event.Reason == nack.ReasonNack || event.Reason == nack.ReasonAck) {
+			return []types.NamespacedName{{
+				Namespace: event.InvolvedObject.Namespace,
+				Name:      event.InvolvedObject.Name,
+			}}
+		}
+		return nil
+	})
 	return krt.NewCollection(
 		gatewayStatuses,
 		func(ctx krt.HandlerContext, i krt.ObjectWithStatus[*gwv1.Gateway, gwv1.GatewayStatus]) *krt.ObjectWithStatus[*gwv1.Gateway, gwv1.GatewayStatus] {
@@ -152,15 +166,27 @@ func (s *Syncer) buildFinalGatewayStatus(
 				status.Listeners[i] = s
 			}
 
-			allEvents := krt.Fetch(ctx, events)
-			for _, event := range allEvents {
+			gatewayEvents := krt.Fetch(ctx, events, krt.FilterIndex(eventsIndex, config.NamespacedName(i.Obj)))
+			// Sort events chronologically to ensure proper NACK/ACK ordering when computing the Gateway status.
+			sort.Slice(gatewayEvents, func(i, j int) bool {
+				return gatewayEvents[i].LastTimestamp.Before(&gatewayEvents[j].LastTimestamp)
+			})
+			for _, event := range gatewayEvents {
 				err := s.NackHandler.FilterEventsAndUpdateState(event)
 				if err != nil {
 					logger.Warn("failed to filter nack/ack events and update state", "error", err)
 				}
 			}
-			nackStatus := s.NackHandler.ComputeStatus(&types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace})
-			status.Conditions = append(status.Conditions, nackStatus.Conditions...)
+			nackCondition := s.NackHandler.ComputeStatus(&types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace})
+			if nackCondition != nil {
+				for i := 0; i < len(status.Conditions); i++ {
+					condition := &status.Conditions[i]
+					// replace the programmed condition with the new nack condition
+					if condition.Type == string(gwv1.GatewayConditionProgrammed) {
+						status.Conditions[i] = *nackCondition
+					}
+				}
+			}
 
 			return &krt.ObjectWithStatus[*gwv1.Gateway, gwv1.GatewayStatus]{
 				Obj:    i.Obj,

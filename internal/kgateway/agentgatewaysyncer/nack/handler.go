@@ -83,11 +83,11 @@ func (h *NackHandler) FilterEventsAndUpdateState(event *corev1.Event) error {
 	return nil
 }
 
-// ComputeStatus computes the Gateway status based on the current set of active NACKs for a gateway.
+// ComputeStatus computes the Gateway status condition based on the current set of active NACKs for a gateway.
 // - No active NACKs: No status returned
 // - One active NACK: Programmed=False with specific error message
 // - Multiple active NACKs: Programmed=False with aggregated error count
-func (h *NackHandler) ComputeStatus(gateway *types.NamespacedName) *gwv1.GatewayStatus {
+func (h *NackHandler) ComputeStatus(gateway *types.NamespacedName) *metav1.Condition {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	activeNacks := h.nackStateStore[gateway]
@@ -105,16 +105,12 @@ func (h *NackHandler) ComputeStatus(gateway *types.NamespacedName) *gwv1.Gateway
 			message = fmt.Sprintf("Configuration rejected: %d errors found", len(activeNacks))
 		}
 
-		return &gwv1.GatewayStatus{
-			Conditions: []metav1.Condition{
-				{
-					Type:               string(gwv1.GatewayConditionProgrammed),
-					Status:             metav1.ConditionFalse,
-					Reason:             string(gwv1.GatewayReasonInvalid),
-					Message:            message,
-					LastTransitionTime: metav1.Now(),
-				},
-			},
+		return &metav1.Condition{
+			Type:               string(gwv1.GatewayConditionProgrammed),
+			Status:             metav1.ConditionFalse,
+			Reason:             string(gwv1.GatewayReasonInvalid),
+			Message:            message,
+			LastTransitionTime: metav1.Now(),
 		}
 	}
 }
