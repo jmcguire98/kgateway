@@ -211,7 +211,6 @@ func registerGatewayAPITypes() {
 			return c.GatewayAPI().GatewayV1alpha2().TLSRoutes(namespace)
 		},
 	)
-
 }
 
 func registerAdditionalCoreTypes() {

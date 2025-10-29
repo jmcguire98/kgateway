@@ -33,7 +33,6 @@ func NewPublisher(ctx context.Context, client kube.Client, systemNamespace strin
 
 // onNack publishes a NACK event as a k8s event.
 func (p *Publisher) onNack(event NackEvent) {
-
 	nackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
 
 	k8sEvent := &corev1.Event{
@@ -64,11 +63,11 @@ func (p *Publisher) onNack(event NackEvent) {
 		p.ctx, k8sEvent, metav1.CreateOptions{},
 	)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		log.Error("Failed to publish NACK event for Gateway", "gateway", event.Gateway, "error", err)
+		log.Error("failed to publish NACK event for Gateway", "gateway", event.Gateway, "error", err)
 		return
 	}
 
-	log.Debug("Published NACK event for Gateway", "gateway", event.Gateway, "nackID", nackID, "typeURL", event.TypeUrl)
+	log.Debug("published NACK event for Gateway", "gateway", event.Gateway, "nackID", nackID, "typeURL", event.TypeUrl)
 }
 
 // onAck publishes an ACK event as a k8s event.
@@ -104,9 +103,9 @@ func (p *Publisher) onAck(event AckEvent) {
 		p.ctx, k8sEvent, metav1.CreateOptions{},
 	)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		log.Error("Failed to publish ACK event for Gateway", "gateway", event.Gateway, "error", err)
+		log.Error("failed to publish ACK event for Gateway", "gateway", event.Gateway, "error", err)
 		return
 	}
 
-	log.Debug("Published ACK event for Gateway", "gateway", event.Gateway, "typeURL", event.TypeUrl)
+	log.Debug("published ACK event for Gateway", "gateway", event.Gateway, "typeURL", event.TypeUrl)
 }

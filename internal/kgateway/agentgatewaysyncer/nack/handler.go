@@ -57,10 +57,10 @@ func (h *NackHandler) HandleAck(ackEvent *AckEvent) {
 // FilterEventsAndConvertToNackStatusUpdate filters Kubernetes Events to only process NACK/ACK events for Gateways.
 // Returns nil for events that should be ignored, or a NackStatusUpdate for events relevant events.
 func (h *NackHandler) FilterEventsAndUpdateState(event *corev1.Event) error {
-	nackHandlerLog.Debug("Processing event", "reason", event.Reason, "kind", event.InvolvedObject.Kind, "name", event.InvolvedObject.Name, "namespace", event.InvolvedObject.Namespace)
+	nackHandlerLog.Debug("processing event", "reason", event.Reason, "kind", event.InvolvedObject.Kind, "name", event.InvolvedObject.Name, "namespace", event.InvolvedObject.Namespace)
 
 	if event.Reason != ReasonNack && event.Reason != ReasonAck {
-		nackHandlerLog.Debug("Ignoring event - not a NACK/ACK event", "reason", event.Reason)
+		nackHandlerLog.Debug("ignoring event - not a NACK/ACK event", "reason", event.Reason)
 		return nil
 	}
 
