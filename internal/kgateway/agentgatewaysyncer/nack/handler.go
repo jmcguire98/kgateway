@@ -133,4 +133,7 @@ func (h *NackHandler) removeNack(gateway types.NamespacedName, nackID string) {
 		return
 	}
 	delete(h.nackStateStore[gateway], nackID)
+	if len(h.nackStateStore[gateway]) == 0 {
+		delete(h.nackStateStore, gateway)
+	}
 }
