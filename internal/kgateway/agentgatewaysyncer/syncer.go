@@ -71,6 +71,7 @@ type Syncer struct {
 }
 
 func NewAgwSyncer(
+	ctx context.Context,
 	controllerName string,
 	client kube.Client,
 	agwCollections *plugins.AgwCollections,
@@ -83,8 +84,7 @@ func NewAgwSyncer(
 		translator:        translator.NewAgwTranslator(agwCollections),
 		client:            client,
 		statusCollections: &status.StatusCollections{},
-		//todo, we definitely shouldn't need to use the background context here
-		NackHandler: nack.NewNackHandler(nack.NewPublisher(context.Background(), client)),
+		NackHandler: nack.NewNackHandler(nack.NewPublisher(ctx, client)),
 	}
 }
 

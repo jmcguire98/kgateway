@@ -592,6 +592,7 @@ func (tc TestCase) Run(
 	// Instead of calling full Init(), manually initialize just what we need for testing
 	// to avoid race conditions with XDS collection building
 	agentGwSyncer := NewAgwSyncer(
+		ctx,
 		wellknown.DefaultAgwControllerName,
 		cli,
 		agwCollections,
