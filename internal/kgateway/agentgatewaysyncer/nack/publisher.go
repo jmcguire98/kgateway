@@ -6,26 +6,38 @@ import (
 
 	"istio.io/istio/pkg/kube"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	"github.com/kgateway-dev/kgateway/v2/pkg/logging"
+	"github.com/kgateway-dev/kgateway/v2/pkg/schemes"
 )
 
 var log = logging.New("nack/publisher")
 
 // Publisher converts NACK events from the agentgateway xDS server into Kubernetes Events.
 type Publisher struct {
-	ctx    context.Context
-	client kube.Client
+	ctx           context.Context
+	client        kube.Client
+	eventRecorder record.EventRecorder
 }
 
 // NewPublisher creates a new NACK event publisher that will publish k8s events
 func NewPublisher(ctx context.Context, client kube.Client) *Publisher {
+	eventBroadcaster := record.NewBroadcaster()
+	eventRecorder := eventBroadcaster.NewRecorder(
+		schemes.DefaultScheme(),
+		corev1.EventSource{Component: wellknown.DefaultAgwControllerName},
+	)
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{
+		Interface: client.Kube().CoreV1().Events(""),
+	})
+
 	return &Publisher{
-		client: client,
-		ctx:    ctx,
+		ctx:           ctx,
+		client:        client,
+		eventRecorder: eventRecorder,
 	}
 }
 
@@ -33,77 +45,51 @@ func NewPublisher(ctx context.Context, client kube.Client) *Publisher {
 func (p *Publisher) onNack(event NackEvent) {
 	nackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
 
-	k8sEvent := &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "agentgateway-nack-",
-			Namespace:    event.Gateway.Namespace,
-			Annotations: map[string]string{
-				AnnotationNackID:     nackID,
-				AnnotationTypeURL:    event.TypeUrl,
-				AnnotationObservedAt: event.Timestamp.Format(time.RFC3339),
-			},
-		},
-		InvolvedObject: corev1.ObjectReference{
-			Kind:       wellknown.GatewayKind,
-			APIVersion: wellknown.GatewayGVK.GroupVersion().String(),
-			Name:       event.Gateway.Name,
-			Namespace:  event.Gateway.Namespace,
-		},
-		Reason:              ReasonNack,
-		Message:             event.ErrorMsg,
-		Type:                corev1.EventTypeWarning,
-		LastTimestamp:       metav1.NewTime(event.Timestamp),
-		Count:               1,
-		ReportingController: wellknown.DefaultAgwControllerName,
+	gatewayRef := &corev1.ObjectReference{
+		Kind:       wellknown.GatewayKind,
+		APIVersion: wellknown.GatewayGVK.GroupVersion().String(),
+		Name:       event.Gateway.Name,
+		Namespace:  event.Gateway.Namespace,
 	}
 
-	_, err := p.client.Kube().CoreV1().Events(event.Gateway.Namespace).Create(
-		p.ctx, k8sEvent, metav1.CreateOptions{},
+	p.eventRecorder.AnnotatedEventf(
+		gatewayRef,
+		map[string]string{
+			AnnotationNackID:     nackID,
+			AnnotationTypeURL:    event.TypeUrl,
+			AnnotationObservedAt: event.Timestamp.Format(time.RFC3339),
+		},
+		corev1.EventTypeWarning,
+		ReasonNack,
+		event.ErrorMsg,
 	)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		log.Error("failed to publish NACK event for Gateway", "gateway", event.Gateway, "error", err)
-		return
-	}
 
 	log.Debug("published NACK event for Gateway", "gateway", event.Gateway, "nackID", nackID, "typeURL", event.TypeUrl)
 }
 
 // onAck publishes an ACK event as a k8s event.
 func (p *Publisher) onAck(event AckEvent) {
-	recoveredNackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
+	nackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
 
-	k8sEvent := &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "agentgateway-ack-",
-			Namespace:    event.Gateway.Namespace,
-			Annotations: map[string]string{
-				AnnotationNackID:     ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl),
-				AnnotationTypeURL:    event.TypeUrl,
-				AnnotationRecoveryOf: recoveredNackID,
-				AnnotationObservedAt: event.Timestamp.Format(time.RFC3339),
-			},
-		},
-		InvolvedObject: corev1.ObjectReference{
-			Kind:       wellknown.GatewayKind,
-			APIVersion: wellknown.GatewayGVK.GroupVersion().String(),
-			Name:       event.Gateway.Name,
-			Namespace:  event.Gateway.Namespace,
-		},
-		Reason:              ReasonAck,
-		Message:             "Configuration accepted successfully",
-		Type:                corev1.EventTypeNormal,
-		LastTimestamp:       metav1.NewTime(event.Timestamp),
-		Count:               1,
-		ReportingController: wellknown.DefaultAgwControllerName,
+	gatewayRef := &corev1.ObjectReference{
+		Kind:       wellknown.GatewayKind,
+		APIVersion: wellknown.GatewayGVK.GroupVersion().String(),
+		Name:       event.Gateway.Name,
+		Namespace:  event.Gateway.Namespace,
 	}
 
-	_, err := p.client.Kube().CoreV1().Events(event.Gateway.Namespace).Create(
-		p.ctx, k8sEvent, metav1.CreateOptions{},
+	p.eventRecorder.AnnotatedEventf(
+		gatewayRef,
+		map[string]string{
+			AnnotationNackID:     nackID,
+			AnnotationTypeURL:    event.TypeUrl,
+			AnnotationRecoveryOf: nackID,
+			AnnotationObservedAt: event.Timestamp.Format(time.RFC3339),
+		},
+		corev1.EventTypeNormal,
+		ReasonAck,
+		"Configuration accepted successfully",
 	)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		log.Error("failed to publish ACK event for Gateway", "gateway", event.Gateway, "error", err)
-		return
-	}
 
 	log.Debug("published ACK event for Gateway", "gateway", event.Gateway, "typeURL", event.TypeUrl)
 }
