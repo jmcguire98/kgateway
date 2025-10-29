@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/krtxds"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	"github.com/kgateway-dev/kgateway/v2/pkg/logging"
 )
@@ -33,10 +32,9 @@ func NewPublisher(ctx context.Context, client kube.Client, systemNamespace strin
 	}
 }
 
-// OnNack implements krtxds.NackEventHandler.
+// OnNack publishes a NACK event as a Kubernetes Event.
 // It converts a NACK event from the xDS server into a Kubernetes Event
-// scoped to the affected Gateway resource.
-func (p *Publisher) OnNack(event krtxds.NackEvent) {
+func (p *Publisher) onNack(event NackEvent) {
 
 	// TODO: check if version / code is available from the event and if not remove the params from ComputeNackID
 	nackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
@@ -49,12 +47,8 @@ func (p *Publisher) OnNack(event krtxds.NackEvent) {
 				AnnotationNackID:     nackID,
 				AnnotationTypeURL:    event.TypeUrl,
 				AnnotationObservedAt: event.Timestamp.Format(time.RFC3339),
-				// TODO: Add (or remove) more annotations when I check what comes out of nacks again
-				// AnnotationResourceNames: event.ResourceNames,
-				// AnnotationVersion: event.Version,
 			},
 		},
-		// TODO: verify that this corresponds to 'regarding' in the event api
 		InvolvedObject: corev1.ObjectReference{
 			Kind:       wellknown.GatewayKind,
 			APIVersion: wellknown.GatewayGVK.GroupVersion().String(),
@@ -80,12 +74,9 @@ func (p *Publisher) OnNack(event krtxds.NackEvent) {
 	log.Debug("Published NACK event for Gateway", "gateway", event.Gateway, "nackID", nackID, "typeURL", event.TypeUrl)
 }
 
-// OnAck converts an ACK event (where config is accepted after a previous NACK) from the xDS server into a Kubernetes Event
-// scoped to the affected Gateway resource, indicating recovery from a previous NACK.
-// TODO: rename this. recovery from nack may just mean the crd causing the nack was deleted, and it's not like we're publishing an event
-// for every ack.
-// Note: we don't need to manually clean up these events, as they have a default ttl of 1 hour so they should just disappear.
-func (p *Publisher) OnAck(event krtxds.AckEvent) {
+// OnAck publishes an ACK event as a Kubernetes Event.
+// It converts an ACK event from the xDS server into a Kubernetes Event
+func (p *Publisher) onAck(event AckEvent) {
 	recoveredNackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
 
 	k8sEvent := &corev1.Event{

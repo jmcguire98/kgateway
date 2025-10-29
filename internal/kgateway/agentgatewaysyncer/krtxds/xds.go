@@ -42,32 +42,12 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/logging"
 
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/nack"
 	kgwxds "github.com/kgateway-dev/kgateway/v2/internal/kgateway/xds"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/krtutil"
 )
 
 var log = logging.New("krtxds")
-
-// NackEvent represents a NACK received from an agentgateway gateway
-type NackEvent struct {
-	Gateway   types.NamespacedName
-	TypeUrl   string
-	ErrorMsg  string
-	Timestamp time.Time
-}
-
-// AckEvent represents a successful ACK received from an agentgateway gateway
-type AckEvent struct {
-	Gateway   types.NamespacedName
-	TypeUrl   string
-	Version   string
-	Timestamp time.Time
-}
-
-type NackEventHandler interface {
-	OnNack(event NackEvent)
-	OnAck(event AckEvent)
-}
 
 type CollectionRegistration struct {
 	Start     func(stop <-chan struct{})
@@ -174,7 +154,7 @@ func Collection[T IntoProto[TT], TT proto.Message](collection krt.Collection[T],
 }
 
 // NewDiscoveryServer creates a DiscoveryServer for agentgateway that sources data from KRT collections via registered generators
-func NewDiscoveryServer(debugger *krt.DebugHandler, nackHandler NackEventHandler, reg ...Registration) *DiscoveryServer {
+func NewDiscoveryServer(debugger *krt.DebugHandler, nackHandler *nack.NackHandler, reg ...Registration) *DiscoveryServer {
 	out := &DiscoveryServer{
 		concurrentPushLimit: make(chan struct{}, features.PushThrottle),
 		RequestRateLimit:    rate.NewLimiter(rate.Limit(features.RequestLimit), 1),
@@ -246,7 +226,7 @@ type DiscoveryServer struct {
 	pushOrder     []string
 	registrations []CollectionRegistration
 
-	nackHandler NackEventHandler
+	nackHandler *nack.NackHandler
 }
 
 // Proxy contains information about an specific instance of a proxy.
@@ -494,13 +474,13 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 	// if we need to.
 	if req.ErrorDetail != nil && s.nackHandler != nil {
 		gateway := kgwxds.AgentgatewayID(con.node)
-		event := NackEvent{
+		nackEvent := nack.NackEvent{
 			Gateway:   gateway,
 			TypeUrl:   req.TypeUrl,
 			ErrorMsg:  req.ErrorDetail.GetMessage(),
 			Timestamp: time.Now(),
 		}
-		s.nackHandler.OnNack(event)
+		s.nackHandler.HandleNack(&nackEvent)
 	}
 	// Check for ACK that resolves a previous NACK before processing the request
 	if req.ErrorDetail == nil && s.nackHandler != nil && req.ResponseNonce != "" {
@@ -508,13 +488,13 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 		previousInfo := con.proxy.GetWatchedResource(req.TypeUrl)
 		if previousInfo != nil && previousInfo.LastError != "" {
 			gateway := kgwxds.AgentgatewayID(con.node)
-			event := AckEvent{
+			ackEvent := nack.AckEvent{
 				Gateway:   gateway,
 				TypeUrl:   req.TypeUrl,
 				Version:   req.ResponseNonce, // Using nonce as version identifier
 				Timestamp: time.Now(),
 			}
-			s.nackHandler.OnAck(event)
+			s.nackHandler.HandleAck(&ackEvent)
 		}
 	}
 

@@ -62,7 +62,7 @@ type Syncer struct {
 	ready       atomic.Bool
 
 	// NACK handling
-	nackPublisher *nack.Publisher
+	NackHandler *nack.NackHandler
 
 	// features
 	Registrations []krtxds.Registration
@@ -81,7 +81,8 @@ func NewAgwSyncer(
 		translator:        translator.NewAgwTranslator(agwCollections),
 		client:            client,
 		statusCollections: &status.StatusCollections{},
-		nackPublisher:     nack.NewPublisher(context.Background(), client, agwCollections.SystemNamespace),
+		//todo, we definitely shouldn't need to use the background context here
+		NackHandler: nack.NewNackHandler(nack.NewPublisher(context.Background(), client, agwCollections.SystemNamespace)),
 	}
 }
 
@@ -90,10 +91,6 @@ func (s *Syncer) Init(krtopts krtutil.KrtOptions) {
 
 	s.translator.Init()
 	s.buildResourceCollections(krtopts)
-}
-
-func (s *Syncer) GetNackPublisher() *nack.Publisher {
-	return s.nackPublisher
 }
 
 func (s *Syncer) StatusCollections() *status.StatusCollections {
@@ -156,21 +153,14 @@ func (s *Syncer) buildFinalGatewayStatus(
 			}
 
 			allEvents := krt.Fetch(ctx, events)
-			nackStatus := nack.ComputeGatewayNackStatusFromEvents(ctx, &types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace}, allEvents)
-			if nackStatus != nil {
-				// Replace any existing Programmed conditions with NACK-derived ones
-				// TODO: this is gross, clean this up.
-				for _, nackCondition := range nackStatus.Conditions {
-					// Remove any existing condition of the same type
-					for j := len(status.Conditions) - 1; j >= 0; j-- {
-						if status.Conditions[j].Type == nackCondition.Type {
-							status.Conditions = append(status.Conditions[:j], status.Conditions[j+1:]...)
-						}
-					}
-					// Add the new NACK condition
-					status.Conditions = append(status.Conditions, nackCondition)
+			for _, event := range allEvents {
+				err := s.NackHandler.FilterEventsAndUpdateState(event)
+				if err != nil {
+					logger.Warn("failed to filter nack/ack events and update state", "error", err)
 				}
 			}
+			nackStatus := s.NackHandler.ComputeStatus(&types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace})
+			status.Conditions = append(status.Conditions, nackStatus.Conditions...)
 
 			return &krt.ObjectWithStatus[*gwv1.Gateway, gwv1.GatewayStatus]{
 				Obj:    i.Obj,
