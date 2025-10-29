@@ -107,12 +107,11 @@ type StartConfig struct {
 // It is intended to be run in a goroutine as the function will block until the supplied
 // context is cancelled
 type ControllerBuilder struct {
-	proxySyncer     *proxy_syncer.ProxySyncer
-	agwSyncer       *agentgatewaysyncer.Syncer
-	agwStatusSyncer *agentgatewaysyncer.AgentGwStatusSyncer
-	cfg             StartConfig
-	mgr             ctrl.Manager
-	commoncol       *collections.CommonCollections
+	proxySyncer *proxy_syncer.ProxySyncer
+	agwSyncer   *agentgatewaysyncer.Syncer
+	cfg         StartConfig
+	mgr         ctrl.Manager
+	commoncol   *collections.CommonCollections
 
 	ready atomic.Bool
 }
@@ -201,7 +200,6 @@ func NewControllerBuilder(ctx context.Context, cfg StartConfig) (*ControllerBuil
 	}
 
 	var agwSyncer *agentgatewaysyncer.Syncer
-	var agwStatusSyncer *agentgatewaysyncer.AgentGwStatusSyncer
 	if cfg.SetupOpts.GlobalSettings.EnableAgentgateway {
 		agwMergedPlugins := agwPluginFactory(cfg)(ctx, cfg.AgwCollections)
 
@@ -219,7 +217,7 @@ func NewControllerBuilder(ctx context.Context, cfg StartConfig) (*ControllerBuil
 			return nil, err
 		}
 
-		agwStatusSyncer = agentgatewaysyncer.NewAgwStatusSyncer(
+		agwStatusSyncer := agentgatewaysyncer.NewAgwStatusSyncer(
 			cfg.AgwControllerName,
 			cfg.AgentgatewayClassName,
 			cfg.Client,
@@ -234,12 +232,11 @@ func NewControllerBuilder(ctx context.Context, cfg StartConfig) (*ControllerBuil
 
 	setupLog.Info("starting controller builder")
 	cb := &ControllerBuilder{
-		proxySyncer:     proxySyncer,
-		agwSyncer:       agwSyncer,
-		agwStatusSyncer: agwStatusSyncer,
-		cfg:             cfg,
-		mgr:             cfg.Manager,
-		commoncol:       cfg.CommonCollections,
+		proxySyncer: proxySyncer,
+		agwSyncer:   agwSyncer,
+		cfg:         cfg,
+		mgr:         cfg.Manager,
+		commoncol:   cfg.CommonCollections,
 	}
 
 	// wait for the ControllerBuilder to Start
@@ -393,14 +390,6 @@ func (c *ControllerBuilder) HasSynced() bool {
 		hasSynced = c.proxySyncer.HasSynced()
 	}
 	return hasSynced
-}
-
-func (c *ControllerBuilder) AgwStatusSyncer() *agentgatewaysyncer.AgentGwStatusSyncer {
-	return c.agwStatusSyncer
-}
-
-func (c *ControllerBuilder) AgwSyncer() *agentgatewaysyncer.Syncer {
-	return c.agwSyncer
 }
 
 // GetDefaultClassInfo returns the default GatewayClass for the kgateway controller.
