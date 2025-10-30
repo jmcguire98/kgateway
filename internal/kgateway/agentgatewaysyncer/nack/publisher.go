@@ -21,8 +21,8 @@ type Publisher struct {
 	eventRecorder record.EventRecorder
 }
 
-// NewPublisher creates a new NACK event publisher that will publish k8s events
-func NewPublisher(client kube.Client) *Publisher {
+// newPublisher creates a new NACK event publisher that will publish k8s events
+func newPublisher(client kube.Client) *Publisher {
 	eventBroadcaster := record.NewBroadcaster()
 	eventRecorder := eventBroadcaster.NewRecorder(
 		schemes.DefaultScheme(),

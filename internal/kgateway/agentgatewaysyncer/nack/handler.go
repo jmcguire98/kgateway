@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"istio.io/istio/pkg/kube"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,10 +37,10 @@ type AckEvent struct {
 	Timestamp time.Time
 }
 
-func NewNackHandler(nackPublisher *Publisher) *NackHandler {
+func NewNackHandler(client kube.Client) *NackHandler {
 	return &NackHandler{
 		nackStateStore: make(map[types.NamespacedName]map[string]string),
-		nackPublisher:  nackPublisher,
+		nackPublisher:  newPublisher(client),
 		mu:             sync.RWMutex{},
 	}
 }

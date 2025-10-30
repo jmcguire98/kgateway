@@ -83,7 +83,7 @@ func NewAgwSyncer(
 		translator:        translator.NewAgwTranslator(agwCollections),
 		client:            client,
 		statusCollections: &status.StatusCollections{},
-		NackHandler:       nack.NewNackHandler(nack.NewPublisher(client)),
+		NackHandler:       nack.NewNackHandler(client),
 	}
 }
 
