@@ -1,7 +1,6 @@
 package nack
 
 import (
-	"context"
 	"time"
 
 	"istio.io/istio/pkg/kube"
@@ -18,13 +17,12 @@ var log = logging.New("nack/publisher")
 
 // Publisher converts NACK events from the agentgateway xDS server into Kubernetes Events.
 type Publisher struct {
-	ctx           context.Context
 	client        kube.Client
 	eventRecorder record.EventRecorder
 }
 
 // NewPublisher creates a new NACK event publisher that will publish k8s events
-func NewPublisher(ctx context.Context, client kube.Client) *Publisher {
+func NewPublisher(client kube.Client) *Publisher {
 	eventBroadcaster := record.NewBroadcaster()
 	eventRecorder := eventBroadcaster.NewRecorder(
 		schemes.DefaultScheme(),
@@ -35,7 +33,6 @@ func NewPublisher(ctx context.Context, client kube.Client) *Publisher {
 	})
 
 	return &Publisher{
-		ctx:           ctx,
 		client:        client,
 		eventRecorder: eventRecorder,
 	}

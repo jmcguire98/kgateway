@@ -206,7 +206,6 @@ func NewControllerBuilder(ctx context.Context, cfg StartConfig) (*ControllerBuil
 		agwMergedPlugins := agwPluginFactory(cfg)(ctx, cfg.AgwCollections)
 
 		agwSyncer = agentgatewaysyncer.NewAgwSyncer(
-			ctx,
 			cfg.AgwControllerName,
 			cfg.Client,
 			cfg.AgwCollections,
