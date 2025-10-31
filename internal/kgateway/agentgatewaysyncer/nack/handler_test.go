@@ -13,6 +13,13 @@ import (
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+var (
+	testGateway      = types.NamespacedName{Name: "test-gw", Namespace: "default"}
+	testNamespace    = "default"
+	testTypeURL      = "type.googleapis.com/agentgateway.dev.resource.Resource"
+	testErrorMessage = "test error"
+)
+
 func TestNewNackHandler(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
@@ -25,30 +32,29 @@ func TestNackHandler_HandleNack(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
 	nackEvent := &NackEvent{
-		Gateway:   types.NamespacedName{Name: "test-gw", Namespace: "default"},
-		TypeUrl:   "type.googleapis.com/agentgateway.dev.resource.Resource",
-		ErrorMsg:  "test error",
+		Gateway:   testGateway,
+		TypeUrl:   testTypeURL,
+		ErrorMsg:  testErrorMessage,
 		Timestamp: time.Now(),
 	}
 
-	// This should not panic - we're testing the flow works
+	// We will test if the actual event publishing works in the publisher test where we can use a fake recorder
 	assert.NotPanics(t, func() {
 		handler.HandleNack(nackEvent)
 	})
 
-	assert.Len(t, handler.nackStateStore[nackEvent.Gateway], 1)
 }
 
 func TestNackHandler_HandleAck(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
 	ackEvent := &AckEvent{
-		Gateway:   types.NamespacedName{Name: "test-gw", Namespace: "default"},
-		TypeUrl:   "type.googleapis.com/agentgateway.dev.resource.Resource",
+		Gateway:   testGateway,
+		TypeUrl:   testTypeURL,
 		Timestamp: time.Now(),
 	}
 
-	// This should not panic - we're testing the flow works
+	// We will test if the actual event publishing works in the publisher test where we can use a fake recorder
 	assert.NotPanics(t, func() {
 		handler.HandleAck(ackEvent)
 	})
@@ -57,7 +63,7 @@ func TestNackHandler_HandleAck(t *testing.T) {
 func TestNackHandler_StateManagement(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
-	gateway := types.NamespacedName{Name: "test-gw", Namespace: "default"}
+	gateway := testGateway
 	nackID1 := "nack1"
 	nackID2 := "nack2"
 	message1 := "error message 1"
@@ -90,7 +96,7 @@ func TestNackHandler_StateManagement(t *testing.T) {
 func TestNackHandler_StateManagement_NonExistentGateway(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
-	gateway := types.NamespacedName{Name: "non-existent", Namespace: "default"}
+	gateway := types.NamespacedName{Name: "non-existent", Namespace: testNamespace}
 
 	// Test removing from non-existent gateway should not panic
 	assert.NotPanics(t, func() {
@@ -101,7 +107,7 @@ func TestNackHandler_StateManagement_NonExistentGateway(t *testing.T) {
 func TestNackHandler_ComputeStatus_NoNacks(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
-	gateway := types.NamespacedName{Name: "test-gw", Namespace: "default"}
+	gateway := testGateway
 
 	condition := handler.ComputeStatus(gateway)
 	assert.Nil(t, condition, "Should return nil when no NACKs exist")
@@ -110,7 +116,7 @@ func TestNackHandler_ComputeStatus_NoNacks(t *testing.T) {
 func TestNackHandler_ComputeStatus_SingleNack(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
-	gateway := types.NamespacedName{Name: "test-gw", Namespace: "default"}
+	gateway := testGateway
 	nackID := "test-nack"
 	errorMsg := "configuration error"
 
@@ -129,7 +135,7 @@ func TestNackHandler_ComputeStatus_SingleNack(t *testing.T) {
 func TestNackHandler_ComputeStatus_MultipleNacks(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
-	gateway := types.NamespacedName{Name: "test-gw", Namespace: "default"}
+	gateway := testGateway
 
 	// Add multiple NACKs
 	handler.addNack(gateway, "nack1", "error 1")
@@ -152,8 +158,8 @@ func TestNackHandler_FilterEventsAndUpdateState_IgnoreNonNackAck(t *testing.T) {
 	event := &corev1.Event{
 		Reason: "SomeOtherReason",
 		InvolvedObject: corev1.ObjectReference{
-			Name:      "test-gw",
-			Namespace: "default",
+			Name:      testGateway.Name,
+			Namespace: testGateway.Namespace,
 		},
 	}
 
@@ -172,21 +178,21 @@ func TestNackHandler_FilterEventsAndUpdateState_NackEvent(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: map[string]string{
 				AnnotationNackID:  nackID,
-				AnnotationTypeURL: "type.googleapis.com/agentgateway.dev.resource.Resource",
+				AnnotationTypeURL: testTypeURL,
 			},
 		},
 		Reason:  ReasonNack,
 		Message: errorMsg,
 		InvolvedObject: corev1.ObjectReference{
-			Name:      "test-gw",
-			Namespace: "default",
+			Name:      testGateway.Name,
+			Namespace: testGateway.Namespace,
 		},
 	}
 
 	err := handler.FilterEventsAndUpdateState(event)
 	assert.NoError(t, err)
 
-	gateway := types.NamespacedName{Name: "test-gw", Namespace: "default"}
+	gateway := testGateway
 	assert.Len(t, handler.nackStateStore[gateway], 1)
 	assert.Equal(t, errorMsg, handler.nackStateStore[gateway][nackID])
 }
@@ -194,7 +200,7 @@ func TestNackHandler_FilterEventsAndUpdateState_NackEvent(t *testing.T) {
 func TestNackHandler_FilterEventsAndUpdateState_AckEvent(t *testing.T) {
 	handler := NewNackHandler(kube.NewFakeClient())
 
-	gateway := types.NamespacedName{Name: "test-gw", Namespace: "default"}
+	gateway := testGateway
 	nackID := "test-nack-id"
 
 	// First add a NACK
@@ -207,13 +213,13 @@ func TestNackHandler_FilterEventsAndUpdateState_AckEvent(t *testing.T) {
 			Annotations: map[string]string{
 				AnnotationNackID:     nackID,
 				AnnotationRecoveryOf: nackID,
-				AnnotationTypeURL:    "type.googleapis.com/agentgateway.dev.resource.Resource",
+				AnnotationTypeURL:    testTypeURL,
 			},
 		},
 		Reason: ReasonAck,
 		InvolvedObject: corev1.ObjectReference{
-			Name:      "test-gw",
-			Namespace: "default",
+			Name:      testGateway.Name,
+			Namespace: testGateway.Namespace,
 		},
 	}
 
@@ -267,8 +273,8 @@ func TestNackHandler_FilterEventsAndUpdateState_MissingAnnotations(t *testing.T)
 				},
 				Reason: tt.reason,
 				InvolvedObject: corev1.ObjectReference{
-					Name:      "test-gw",
-					Namespace: "default",
+					Name:      testGateway.Name,
+					Namespace: testGateway.Namespace,
 				},
 			}
 
