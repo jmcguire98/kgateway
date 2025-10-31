@@ -80,14 +80,14 @@ func NewAgwSyncer(
 	additionalGatewayClasses map[string]*deployer.GatewayClassInfo,
 ) *Syncer {
 	return &Syncer{
-		agwCollections:    agwCollections,
-		controllerName:    controllerName,
-		agwPlugins:        agwPlugins,
-		translator:        translator.NewAgwTranslator(agwCollections),
-    additionalGatewayClasses: additionalGatewayClasses,
-		client:            client,
-		statusCollections: &status.StatusCollections{},
-		NackHandler:       nack.NewNackHandler(client),
+		agwCollections:           agwCollections,
+		controllerName:           controllerName,
+		agwPlugins:               agwPlugins,
+		translator:               translator.NewAgwTranslator(agwCollections),
+		additionalGatewayClasses: additionalGatewayClasses,
+		client:                   client,
+		statusCollections:        &status.StatusCollections{},
+		NackHandler:              nack.NewNackHandler(client),
 	}
 }
 
