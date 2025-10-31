@@ -42,7 +42,6 @@ func TestNackHandler_HandleNack(t *testing.T) {
 	assert.NotPanics(t, func() {
 		handler.HandleNack(nackEvent)
 	})
-
 }
 
 func TestNackHandler_HandleAck(t *testing.T) {
