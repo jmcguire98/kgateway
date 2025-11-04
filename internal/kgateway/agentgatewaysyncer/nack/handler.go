@@ -55,8 +55,8 @@ func (h *NackHandler) HandleAck(ackEvent *AckEvent) {
 	h.nackPublisher.onAck(*ackEvent)
 }
 
-// FilterEventsAndConvertToNackStatusUpdate filters Kubernetes Events to only process NACK/ACK events for Gateways.
-// Returns nil for events that should be ignored, or a NackStatusUpdate for events relevant events.
+// FilterEventsAndUpdateState processes a Kubernetes Event and updates in-memory NACK state.
+// It ignores non NACK/ACK events, and returns an error only for malformed NACK/ACK events.
 func (h *NackHandler) FilterEventsAndUpdateState(event *corev1.Event) error {
 	nackHandlerLog.Debug("processing event", "reason", event.Reason, "kind", event.InvolvedObject.Kind, "name", event.InvolvedObject.Name, "namespace", event.InvolvedObject.Namespace)
 
@@ -65,7 +65,7 @@ func (h *NackHandler) FilterEventsAndUpdateState(event *corev1.Event) error {
 		return nil
 	}
 
-	nackID, exists := event.Annotations[AnnotationNackID]
+	nackID, exists := event.Annotations[annotationNackID]
 	if !exists || nackID == "" {
 		return fmt.Errorf("event missing NACK ID annotation: %v", event.Annotations)
 	}
@@ -73,7 +73,7 @@ func (h *NackHandler) FilterEventsAndUpdateState(event *corev1.Event) error {
 	// Handle recovery events (ACKs that reference a previous NACK)
 	isRecovery := event.Reason == ReasonAck
 	if isRecovery {
-		recoveryOf, hasRecovery := event.Annotations[AnnotationRecoveryOf]
+		recoveryOf, hasRecovery := event.Annotations[annotationRecoveryOf]
 		if !hasRecovery || recoveryOf == "" {
 			return fmt.Errorf("ACK event missing recovery annotation: %v", event.Annotations)
 		}

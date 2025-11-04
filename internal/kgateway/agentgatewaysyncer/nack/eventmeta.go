@@ -14,22 +14,22 @@ const (
 
 // Annotation keys used for NACK events
 const (
-	// AnnotationNackID is a stable hash identifying a specific NACK event
-	AnnotationNackID = "kgateway.dev/nack-id"
+	// annotationNackID is a stable hash identifying a specific NACK event
+	annotationNackID = "kgateway.dev/nack-id"
 
-	// AnnotationTypeURL is the xDS TypeURL that was rejected
-	AnnotationTypeURL = "kgateway.dev/type-url"
+	// annotationTypeURL is the xDS TypeURL that was rejected
+	annotationTypeURL = "kgateway.dev/type-url"
 
-	// AnnotationObservedAt is the RFC3339 timestamp when the NACK was last observed
-	AnnotationObservedAt = "kgateway.dev/observed-at"
+	// annotationObservedAt is the RFC3339 timestamp when the NACK was last observed
+	annotationObservedAt = "kgateway.dev/observed-at"
 
-	// AnnotationRecoveryOf points to the NACK ID that this ACK event resolves
-	AnnotationRecoveryOf = "kgateway.dev/recovery-of"
+	// annotationRecoveryOf points to the NACK ID that this ACK event resolves
+	annotationRecoveryOf = "kgateway.dev/recovery-of"
 )
 
-// ComputeNackID creates a stable, identifier for a NACK event.
+// computeNackID creates a stable identifier for a NACK event.
 // The same combination of inputs will always produce the same NACK ID.
-func ComputeNackID(gatewayNamespacedName, typeURL string) string {
+func computeNackID(gatewayNamespacedName, typeURL string) string {
 	h := sha256.New()
 
 	input := strings.Join([]string{gatewayNamespacedName, typeURL}, "|")

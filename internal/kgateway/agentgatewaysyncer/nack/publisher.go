@@ -40,7 +40,7 @@ func newPublisher(client kube.Client) *Publisher {
 
 // onNack publishes a NACK event as a k8s event.
 func (p *Publisher) onNack(event NackEvent) {
-	nackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
+	nackID := computeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
 
 	gatewayRef := &corev1.ObjectReference{
 		Kind:       wellknown.GatewayKind,
@@ -52,9 +52,9 @@ func (p *Publisher) onNack(event NackEvent) {
 	p.eventRecorder.AnnotatedEventf(
 		gatewayRef,
 		map[string]string{
-			AnnotationNackID:     nackID,
-			AnnotationTypeURL:    event.TypeUrl,
-			AnnotationObservedAt: event.Timestamp.Format(time.RFC3339),
+			annotationNackID:     nackID,
+			annotationTypeURL:    event.TypeUrl,
+			annotationObservedAt: event.Timestamp.Format(time.RFC3339),
 		},
 		corev1.EventTypeWarning,
 		ReasonNack,
@@ -66,7 +66,7 @@ func (p *Publisher) onNack(event NackEvent) {
 
 // onAck publishes an ACK event as a k8s event.
 func (p *Publisher) onAck(event AckEvent) {
-	nackID := ComputeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
+	nackID := computeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
 
 	gatewayRef := &corev1.ObjectReference{
 		Kind:       wellknown.GatewayKind,
@@ -78,10 +78,10 @@ func (p *Publisher) onAck(event AckEvent) {
 	p.eventRecorder.AnnotatedEventf(
 		gatewayRef,
 		map[string]string{
-			AnnotationNackID:     nackID,
-			AnnotationTypeURL:    event.TypeUrl,
-			AnnotationRecoveryOf: nackID,
-			AnnotationObservedAt: event.Timestamp.Format(time.RFC3339),
+			annotationNackID:     nackID,
+			annotationTypeURL:    event.TypeUrl,
+			annotationRecoveryOf: nackID,
+			annotationObservedAt: event.Timestamp.Format(time.RFC3339),
 		},
 		corev1.EventTypeNormal,
 		ReasonAck,

@@ -176,8 +176,8 @@ func TestNackHandler_FilterEventsAndUpdateState_NackEvent(t *testing.T) {
 	event := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: map[string]string{
-				AnnotationNackID:  nackID,
-				AnnotationTypeURL: testTypeURL,
+				annotationNackID:  nackID,
+				annotationTypeURL: testTypeURL,
 			},
 		},
 		Reason:  ReasonNack,
@@ -210,9 +210,9 @@ func TestNackHandler_FilterEventsAndUpdateState_AckEvent(t *testing.T) {
 	event := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: map[string]string{
-				AnnotationNackID:     nackID,
-				AnnotationRecoveryOf: nackID,
-				AnnotationTypeURL:    testTypeURL,
+				annotationNackID:     nackID,
+				annotationRecoveryOf: nackID,
+				annotationTypeURL:    testTypeURL,
 			},
 		},
 		Reason: ReasonAck,
@@ -243,7 +243,7 @@ func TestNackHandler_FilterEventsAndUpdateState_MissingAnnotations(t *testing.T)
 			name:   "NACK missing NackID",
 			reason: ReasonNack,
 			annotations: map[string]string{
-				AnnotationTypeURL: "type.googleapis.com/test",
+				annotationTypeURL: "type.googleapis.com/test",
 			},
 			expectError: true,
 		},
@@ -257,8 +257,8 @@ func TestNackHandler_FilterEventsAndUpdateState_MissingAnnotations(t *testing.T)
 			name:   "ACK missing RecoveryOf",
 			reason: ReasonAck,
 			annotations: map[string]string{
-				AnnotationNackID:  "test-id",
-				AnnotationTypeURL: "type.googleapis.com/test",
+				annotationNackID:  "test-id",
+				annotationTypeURL: "type.googleapis.com/test",
 			},
 			expectError: true,
 		},

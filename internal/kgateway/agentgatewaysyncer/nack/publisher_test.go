@@ -80,16 +80,16 @@ func TestPublisher_ComputeNackID(t *testing.T) {
 	typeURL2 := "type.googleapis.com/agentgateway.dev.workload.Address"
 
 	// Test that same inputs produce same ID
-	id1a := ComputeNackID(gateway1, typeURL1)
-	id1b := ComputeNackID(gateway1, typeURL1)
+	id1a := computeNackID(gateway1, typeURL1)
+	id1b := computeNackID(gateway1, typeURL1)
 	assert.Equal(t, id1a, id1b)
 
 	// Test that different gateways produce different IDs
-	id2 := ComputeNackID(gateway2, typeURL1)
+	id2 := computeNackID(gateway2, typeURL1)
 	assert.NotEqual(t, id1a, id2)
 
 	// Test that different type URLs produce different IDs
-	id3 := ComputeNackID(gateway1, typeURL2)
+	id3 := computeNackID(gateway1, typeURL2)
 	assert.NotEqual(t, id1a, id3)
 
 	assert.NotEmpty(t, id1a)
