@@ -69,6 +69,7 @@ type Syncer struct {
 }
 
 func NewAgwSyncer(
+	ctx context.Context,
 	controllerName string,
 	client kube.Client,
 	agwCollections *plugins.AgwCollections,
@@ -83,7 +84,7 @@ func NewAgwSyncer(
 		additionalGatewayClasses: additionalGatewayClasses,
 		client:                   client,
 		statusCollections:        &status.StatusCollections{},
-		EventPublisher:           nack.NewNackEventPublisher(client),
+		EventPublisher:           nack.NewNackEventPublisher(ctx, client),
 	}
 }
 

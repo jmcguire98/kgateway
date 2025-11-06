@@ -1,8 +1,12 @@
 package nack
 
 import (
+	"context"
+
 	"istio.io/istio/pkg/kube"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 
@@ -42,18 +46,28 @@ func newPublisher(client kube.Client) *Publisher {
 }
 
 // onNack publishes a NACK event as a k8s event.
-func (p *Publisher) onNack(event NackEvent) {
+func (p *Publisher) onNack(ctx context.Context, event NackEvent) {
+	var gatewayUID, deployUID types.UID
+	if gw, err := p.client.GatewayAPI().GatewayV1().Gateways(event.Gateway.Namespace).Get(ctx, event.Gateway.Name, metav1.GetOptions{}); err == nil {
+		gatewayUID = gw.GetUID()
+	}
+	if dep, err := p.client.Kube().AppsV1().Deployments(event.Gateway.Namespace).Get(ctx, event.Gateway.Name, metav1.GetOptions{}); err == nil {
+		deployUID = dep.GetUID()
+	}
+
 	gatewayRef := &corev1.ObjectReference{
 		Kind:       wellknown.GatewayKind,
 		APIVersion: wellknown.GatewayGVK.GroupVersion().String(),
 		Name:       event.Gateway.Name,
 		Namespace:  event.Gateway.Namespace,
+		UID:        gatewayUID,
 	}
 	deploymentRef := &corev1.ObjectReference{
 		Kind:       wellknown.DeploymentGVK.Kind,
 		APIVersion: wellknown.DeploymentGVK.GroupVersion().String(),
 		Name:       event.Gateway.Name,
 		Namespace:  event.Gateway.Namespace,
+		UID:        deployUID,
 	}
 
 	p.eventRecorder.Eventf(gatewayRef, corev1.EventTypeWarning, ReasonNack, event.ErrorMsg)

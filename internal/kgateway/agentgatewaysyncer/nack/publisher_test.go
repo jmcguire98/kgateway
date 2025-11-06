@@ -1,6 +1,7 @@
 package nack
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func TestPublisher_OnNack(t *testing.T) {
 	fakeRecorder := record.NewFakeRecorder(10)
 	publisher.eventRecorder = fakeRecorder
 
-	publisher.onNack(testNackEvent)
+	publisher.onNack(context.TODO(), testNackEvent)
 
 	// Verify event was recorded
 	select {

@@ -1,6 +1,7 @@
 package nack
 
 import (
+	"context"
 	"time"
 
 	"istio.io/istio/pkg/kube"
@@ -9,6 +10,7 @@ import (
 
 type NackEventPublisher struct {
 	nackPublisher *Publisher
+	ctx           context.Context
 }
 
 // NackEvent represents a NACK received from an agentgateway gateway
@@ -19,13 +21,14 @@ type NackEvent struct {
 	Timestamp time.Time
 }
 
-func NewNackEventPublisher(client kube.Client) *NackEventPublisher {
+func NewNackEventPublisher(ctx context.Context, client kube.Client) *NackEventPublisher {
 	return &NackEventPublisher{
 		nackPublisher: newPublisher(client),
+		ctx:           ctx,
 	}
 }
 
 // PublishNack publishes a NACK event to the Kubernetes Event API.
-func (h *NackEventPublisher) PublishNack(nackEvent *NackEvent) {
-	h.nackPublisher.onNack(*nackEvent)
+func (n *NackEventPublisher) PublishNack(nackEvent *NackEvent) {
+	n.nackPublisher.onNack(n.ctx, *nackEvent)
 }
