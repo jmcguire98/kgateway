@@ -7,8 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"istio.io/istio/pkg/kube"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	apiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 var (
@@ -39,7 +42,22 @@ func TestPublisher_OnNack(t *testing.T) {
 	fakeRecorder := record.NewFakeRecorder(10)
 	publisher.eventRecorder = fakeRecorder
 
-	publisher.onNack(context.TODO(), testNackEvent)
+	ctx := context.TODO()
+	// Ensure involved objects exist so UID lookups succeed
+	_, _ = client.GatewayAPI().GatewayV1().Gateways(testGateway.Namespace).Create(ctx, &apiv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testGateway.Name,
+			Namespace: testGateway.Namespace,
+		},
+	}, metav1.CreateOptions{})
+	_, _ = client.Kube().AppsV1().Deployments(testGateway.Namespace).Create(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testGateway.Name,
+			Namespace: testGateway.Namespace,
+		},
+	}, metav1.CreateOptions{})
+
+	publisher.onNack(ctx, testNackEvent)
 
 	// Verify event was recorded
 	select {
