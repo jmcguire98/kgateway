@@ -103,10 +103,16 @@ func (p *Publisher) onNack(event NackEvent, resourceNames []string) {
 		Name:       event.Gateway.Name,
 		Namespace:  event.Gateway.Namespace,
 	}
+	deploymentRef := &corev1.ObjectReference{
+		Kind:       wellknown.DeploymentGVK.Kind,
+		APIVersion: wellknown.DeploymentGVK.GroupVersion().String(),
+		Name:       event.Gateway.Name,
+		Namespace:  event.Gateway.Namespace,
+	}
 
-	// enrich error message with resource names
 	msg := composeNackMessage(event.ErrorMsg, resourceNames)
 	p.eventRecorder.Eventf(gatewayRef, corev1.EventTypeWarning, ReasonNack, msg)
+	p.eventRecorder.Eventf(deploymentRef, corev1.EventTypeWarning, ReasonNack, msg)
 
 	log.Debug("published NACK event for Gateway", "gateway", event.Gateway, "typeURL", event.TypeUrl)
 }
