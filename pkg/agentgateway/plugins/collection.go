@@ -42,7 +42,6 @@ type AgwCollections struct {
 	Secrets        krt.Collection[*corev1.Secret]
 	ConfigMaps     krt.Collection[*corev1.ConfigMap]
 	EndpointSlices krt.Collection[*discovery.EndpointSlice]
-	Events         krt.Collection[*corev1.Event]
 
 	// Gateway API resources
 	GatewayClasses     krt.Collection[*gwv1.GatewayClass]
@@ -213,23 +212,6 @@ func registerGatewayAPITypes() {
 	)
 }
 
-func registerAdditionalCoreTypes() {
-	// Register Event type for NACK status tracking
-	kubeclient.Register[*corev1.Event](
-		wellknown.EventGVR,
-		wellknown.EventGVK,
-		func(c kubeclient.ClientGetter, ns string, o metav1.ListOptions) (runtime.Object, error) {
-			return c.Kube().CoreV1().Events(ns).List(context.Background(), o)
-		},
-		func(c kubeclient.ClientGetter, ns string, o metav1.ListOptions) (watch.Interface, error) {
-			return c.Kube().CoreV1().Events(ns).Watch(context.Background(), o)
-		},
-		func(c kubeclient.ClientGetter, ns string) kubetypes.WriteAPI[*corev1.Event] {
-			return c.Kube().CoreV1().Events(ns)
-		},
-	)
-}
-
 func registerInferenceExtensionTypes(client istiokube.Client) {
 	// Create the inference extension clientset.
 	kubeclient.Register(
@@ -254,7 +236,6 @@ func (c *AgwCollections) HasSynced() bool {
 		c.Services != nil && c.Services.HasSynced() &&
 		c.Secrets != nil && c.Secrets.HasSynced() &&
 		c.ConfigMaps != nil && c.ConfigMaps.HasSynced() &&
-		c.Events != nil && c.Events.HasSynced() &&
 		c.GatewayClasses != nil && c.GatewayClasses.HasSynced() &&
 		c.Gateways != nil && c.Gateways.HasSynced() &&
 		c.HTTPRoutes != nil && c.HTTPRoutes.HasSynced() &&
@@ -283,7 +264,6 @@ func NewAgwCollections(
 ) (*AgwCollections, error) {
 	// Register Gateway API and kgateway types with Istio kubeclient system
 	registerGatewayAPITypes()
-	registerAdditionalCoreTypes()
 	registerInferenceExtensionTypes(commoncol.Client)
 	registerKgwResources(commoncol.OurClient)
 	agwCollections := &AgwCollections{
@@ -319,12 +299,6 @@ func NewAgwCollections(
 		EndpointSlices: krt.WrapClient(
 			kclient.NewFiltered[*discovery.EndpointSlice](commoncol.Client, kubetypes.Filter{ObjectFilter: commoncol.Client.ObjectFilter()}),
 			commoncol.KrtOpts.ToOptions("informer/EndpointSlices")...),
-		// Watch all Gateway-related events, then filter client-side for NACK/ACK events to avoid performance issues.
-		Events: krt.WrapClient(
-			kclient.NewFiltered[*corev1.Event](commoncol.Client, kubetypes.Filter{
-				FieldSelector: "involvedObject.kind=Gateway",
-			}),
-			commoncol.KrtOpts.ToOptions("informer/Events")...),
 
 		// Gateway API resources
 		GatewayClasses:     krt.WrapClient(kclient.NewFilteredDelayed[*gwv1.GatewayClass](commoncol.Client, wellknown.GatewayClassGVR, kubetypes.Filter{ObjectFilter: commoncol.Client.ObjectFilter()}), commoncol.KrtOpts.ToOptions("informer/GatewayClasses")...),

@@ -164,7 +164,7 @@ func Collection[T IntoProto[TT], TT proto.Message](collection krt.Collection[T],
 }
 
 // NewDiscoveryServer creates a DiscoveryServer for agentgateway that sources data from KRT collections via registered generators
-func NewDiscoveryServer(debugger *krt.DebugHandler, nackHandler *nack.NackHandler, reg ...Registration) *DiscoveryServer {
+func NewDiscoveryServer(debugger *krt.DebugHandler, eventPublisher *nack.NackEventPublisher, reg ...Registration) *DiscoveryServer {
 	out := &DiscoveryServer{
 		concurrentPushLimit: make(chan struct{}, features.PushThrottle),
 		RequestRateLimit:    rate.NewLimiter(rate.Limit(features.RequestLimit), 1),
@@ -175,7 +175,7 @@ func NewDiscoveryServer(debugger *krt.DebugHandler, nackHandler *nack.NackHandle
 		debugHandlers:       map[string]string{},
 		adsClients:          map[string]*Connection{},
 		krtDebugger:         debugger,
-		nackHandler:         nackHandler,
+		nackHandler:         eventPublisher,
 		DebounceOptions: DebounceOptions{
 			DebounceAfter: features.DebounceAfter,
 			DebounceMax:   features.DebounceMax,
@@ -236,7 +236,7 @@ type DiscoveryServer struct {
 	pushOrder     []string
 	registrations []CollectionRegistration
 
-	nackHandler *nack.NackHandler
+	nackHandler *nack.NackEventPublisher
 }
 
 // Proxy contains information about an specific instance of a proxy.
@@ -505,7 +505,7 @@ func (s *DiscoveryServer) processDeltaRequest(req *discovery.DeltaDiscoveryReque
 
 // shouldRespondDelta determines whether this request needs to be responded back. It applies the ack/nack rules as per xds protocol
 // using WatchedResource for previous state and discovery request for the current state.
-func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryRequest, nackHandler *nack.NackHandler) bool {
+func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryRequest, nackHandler *nack.NackEventPublisher) bool {
 	stype := v3.GetShortType(request.TypeUrl)
 
 	// If there is an error in request that means previous response is erroneous.
@@ -523,13 +523,20 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 
 		if nackHandler != nil {
 			gateway := kgwxds.AgentgatewayID(con.node)
+			// Collect resource names from the request only (subscribe/unsubscribe/initial versions)
+			names := make([]string, 0, len(request.ResourceNamesSubscribe)+len(request.ResourceNamesUnsubscribe)+len(request.InitialResourceVersions))
+			names = append(names, request.ResourceNamesSubscribe...)
+			names = append(names, request.ResourceNamesUnsubscribe...)
+			for n := range request.InitialResourceVersions {
+				names = append(names, n)
+			}
 			nackEvent := nack.NackEvent{
 				Gateway:   gateway,
 				TypeUrl:   request.TypeUrl,
 				ErrorMsg:  request.ErrorDetail.GetMessage(),
 				Timestamp: time.Now(),
 			}
-			nackHandler.HandleNack(&nackEvent)
+			nackHandler.PublishNack(&nackEvent, names)
 		}
 		return false
 	}
@@ -583,34 +590,15 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 
 	var alwaysRespond bool
 	var subChanged bool
-	var hadPreviousError bool
 
 	// Update resource names, and record ACK if required.
 	con.proxy.UpdateWatchedResource(request.TypeUrl, func(wr *model.WatchedResource) *model.WatchedResource {
 		wr.ResourceNames, _, subChanged = deltaWatchedResources(wr.ResourceNames, request)
-		if !spontaneousReq {
-			// Check if there was a previous error before clearing it
-			hadPreviousError = wr.LastError != ""
-			// Clear last error, we got an ACK.
-			// Otherwise, this is just a change in resource subscription, so leave the last ACK info in place.
-			wr.LastError = ""
-			wr.NonceAcked = request.ResponseNonce
-		}
+
 		alwaysRespond = wr.AlwaysRespond
 		wr.AlwaysRespond = false
 		return wr
 	})
-
-	// Handle ACK event if we cleared a previous error
-	if !spontaneousReq && hadPreviousError && nackHandler != nil && request.ResponseNonce != "" {
-		gateway := kgwxds.AgentgatewayID(con.node)
-		ackEvent := nack.AckEvent{
-			Gateway:   gateway,
-			TypeUrl:   request.TypeUrl,
-			Timestamp: time.Now(),
-		}
-		nackHandler.HandleAck(&ackEvent)
-	}
 
 	// It is invalid in the below two cases:
 	// 1. no subscribed resources change from spontaneous delta request.

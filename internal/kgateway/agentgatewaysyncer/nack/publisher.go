@@ -1,7 +1,9 @@
 package nack
 
 import (
-	"time"
+	"fmt"
+	"sort"
+	"strings"
 
 	"istio.io/istio/pkg/kube"
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +16,61 @@ import (
 )
 
 var log = logging.New("nack/publisher")
+
+// Event reasons for Kubernetes Events created by agentgateway NACK detection
+const (
+	ReasonNack = "AgentGatewayNackError"
+)
+
+// composeNackMessage appends a summarized list of involved resource names to the base error message,
+// ensuring the final string remains under a safe size and is readable.
+func composeNackMessage(base string, resourceNames []string) string {
+	const (
+		maxNamesToShow   = 20
+		maxMessageLength = 512
+	)
+	if len(resourceNames) == 0 {
+		return base
+	}
+	// Deduplicate and sort
+	uniq := map[string]struct{}{}
+	for _, n := range resourceNames {
+		if n == "" {
+			continue
+		}
+		uniq[n] = struct{}{}
+	}
+	all := make([]string, 0, len(uniq))
+	for n := range uniq {
+		all = append(all, n)
+	}
+	sort.Strings(all)
+	if len(all) == 0 {
+		return base
+	}
+	if len(all) > maxNamesToShow {
+		all = all[:maxNamesToShow]
+	}
+	list := strings.Join(all, ",")
+	suffix := fmt.Sprintf(" resources=[%s]", list)
+	msg := base
+	truncated := false
+	if len(msg)+len(suffix) > maxMessageLength {
+		allowed := maxMessageLength - len(msg) - len(" resources=[]")
+		if allowed < 0 {
+			allowed = 0
+		}
+		if allowed < len(list) {
+			list = list[:allowed]
+			truncated = true
+			suffix = fmt.Sprintf(" resources=[%s]", list)
+		}
+	}
+	if truncated {
+		return msg + suffix + " (truncated)"
+	}
+	return msg + suffix
+}
 
 // Publisher converts NACK events from the agentgateway xDS server into Kubernetes Events.
 type Publisher struct {
@@ -39,9 +96,7 @@ func newPublisher(client kube.Client) *Publisher {
 }
 
 // onNack publishes a NACK event as a k8s event.
-func (p *Publisher) onNack(event NackEvent) {
-	nackID := computeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
-
+func (p *Publisher) onNack(event NackEvent, resourceNames []string) {
 	gatewayRef := &corev1.ObjectReference{
 		Kind:       wellknown.GatewayKind,
 		APIVersion: wellknown.GatewayGVK.GroupVersion().String(),
@@ -49,44 +104,9 @@ func (p *Publisher) onNack(event NackEvent) {
 		Namespace:  event.Gateway.Namespace,
 	}
 
-	p.eventRecorder.AnnotatedEventf(
-		gatewayRef,
-		map[string]string{
-			annotationNackID:     nackID,
-			annotationTypeURL:    event.TypeUrl,
-			annotationObservedAt: event.Timestamp.Format(time.RFC3339),
-		},
-		corev1.EventTypeWarning,
-		ReasonNack,
-		event.ErrorMsg,
-	)
+	// enrich error message with resource names
+	msg := composeNackMessage(event.ErrorMsg, resourceNames)
+	p.eventRecorder.Eventf(gatewayRef, corev1.EventTypeWarning, ReasonNack, msg)
 
-	log.Debug("published NACK event for Gateway", "gateway", event.Gateway, "nackID", nackID, "typeURL", event.TypeUrl)
-}
-
-// onAck publishes an ACK event as a k8s event.
-func (p *Publisher) onAck(event AckEvent) {
-	nackID := computeNackID(event.Gateway.Namespace+"/"+event.Gateway.Name, event.TypeUrl)
-
-	gatewayRef := &corev1.ObjectReference{
-		Kind:       wellknown.GatewayKind,
-		APIVersion: wellknown.GatewayGVK.GroupVersion().String(),
-		Name:       event.Gateway.Name,
-		Namespace:  event.Gateway.Namespace,
-	}
-
-	p.eventRecorder.AnnotatedEventf(
-		gatewayRef,
-		map[string]string{
-			annotationNackID:     nackID,
-			annotationTypeURL:    event.TypeUrl,
-			annotationRecoveryOf: nackID,
-			annotationObservedAt: event.Timestamp.Format(time.RFC3339),
-		},
-		corev1.EventTypeNormal,
-		ReasonAck,
-		"Configuration accepted successfully",
-	)
-
-	log.Debug("published ACK event for Gateway", "gateway", event.Gateway, "typeURL", event.TypeUrl)
+	log.Debug("published NACK event for Gateway", "gateway", event.Gateway, "typeURL", event.TypeUrl)
 }

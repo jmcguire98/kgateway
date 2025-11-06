@@ -3,14 +3,12 @@ package agentgatewaysyncer
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"sync/atomic"
 
 	"github.com/agentgateway/agentgateway/go/api"
 	envoytypes "github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	envoycache "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
-	"istio.io/istio/pkg/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -21,7 +19,6 @@ import (
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/nack"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/status"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/agentgatewaysyncer/krtxds"
@@ -33,6 +30,7 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/krtutil"
 	krtpkg "github.com/kgateway-dev/kgateway/v2/pkg/utils/krtutil"
 
+	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/kube"
 	"istio.io/istio/pkg/kube/krt"
 	"istio.io/istio/pkg/ptr"
@@ -66,7 +64,7 @@ type Syncer struct {
 	ready       atomic.Bool
 
 	// NACK handling
-	NackHandler *nack.NackHandler
+	EventPublisher *nack.NackEventPublisher
 
 	// features
 	Registrations []krtxds.Registration
@@ -87,7 +85,7 @@ func NewAgwSyncer(
 		additionalGatewayClasses: additionalGatewayClasses,
 		client:                   client,
 		statusCollections:        &status.StatusCollections{},
-		NackHandler:              nack.NewNackHandler(client),
+		EventPublisher:           nack.NewNackEventPublisher(client),
 	}
 }
 
@@ -116,7 +114,7 @@ func (s *Syncer) buildResourceCollections(krtopts krtutil.KrtOptions) {
 		status.RegisterStatus(s.statusCollections, col, translator.GetStatus)
 	}
 
-	gatewayFinalStatus := s.buildFinalGatewayStatus(gatewayInitialStatus, routeAttachments, s.agwCollections.Events, krtopts)
+	gatewayFinalStatus := s.buildFinalGatewayStatus(gatewayInitialStatus, routeAttachments, krtopts)
 	status.RegisterStatus(s.statusCollections, gatewayFinalStatus, translator.GetStatus)
 
 	// Build address collections
@@ -132,23 +130,10 @@ func (s *Syncer) buildResourceCollections(krtopts krtutil.KrtOptions) {
 func (s *Syncer) buildFinalGatewayStatus(
 	gatewayStatuses krt.StatusCollection[*gwv1.Gateway, gwv1.GatewayStatus],
 	routeAttachments krt.Collection[*translator.RouteAttachment],
-	events krt.Collection[*corev1.Event],
 	krtopts krtutil.KrtOptions,
 ) krt.StatusCollection[*gwv1.Gateway, gwv1.GatewayStatus] {
 	routeAttachmentsIndex := krt.NewIndex(routeAttachments, "to", func(o *translator.RouteAttachment) []types.NamespacedName {
 		return []types.NamespacedName{o.To}
-	})
-
-	// Create an index of Events by Gateway for use in filtering NACK/ACK events
-	eventsIndex := krt.NewIndex(events, "gateway", func(event *corev1.Event) []types.NamespacedName {
-		if event.InvolvedObject.Kind == wellknown.GatewayKind &&
-			(event.Reason == nack.ReasonNack || event.Reason == nack.ReasonAck) {
-			return []types.NamespacedName{{
-				Namespace: event.InvolvedObject.Namespace,
-				Name:      event.InvolvedObject.Name,
-			}}
-		}
-		return nil
 	})
 	return krt.NewCollection(
 		gatewayStatuses,
@@ -164,28 +149,6 @@ func (s *Syncer) buildFinalGatewayStatus(
 			for i, s := range status.Listeners {
 				s.AttachedRoutes = counts[string(s.Name)]
 				status.Listeners[i] = s
-			}
-
-			gatewayEvents := krt.Fetch(ctx, events, krt.FilterIndex(eventsIndex, config.NamespacedName(i.Obj)))
-			// Sort events chronologically to ensure proper NACK/ACK ordering when computing the Gateway status.
-			sort.Slice(gatewayEvents, func(i, j int) bool {
-				return gatewayEvents[i].LastTimestamp.Before(&gatewayEvents[j].LastTimestamp)
-			})
-			for _, event := range gatewayEvents {
-				err := s.NackHandler.FilterEventsAndUpdateState(event)
-				if err != nil {
-					logger.Warn("failed to filter nack/ack events and update state", "error", err)
-				}
-			}
-			nackCondition := s.NackHandler.ComputeStatus(types.NamespacedName{Name: i.Obj.Name, Namespace: i.Obj.Namespace})
-			if nackCondition != nil {
-				for i := 0; i < len(status.Conditions); i++ {
-					condition := &status.Conditions[i]
-					// replace the programmed condition with the new nack condition
-					if condition.Type == string(gwv1.GatewayConditionProgrammed) {
-						status.Conditions[i] = *nackCondition
-					}
-				}
 			}
 
 			return &krt.ObjectWithStatus[*gwv1.Gateway, gwv1.GatewayStatus]{

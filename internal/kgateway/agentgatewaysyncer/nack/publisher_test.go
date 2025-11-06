@@ -6,19 +6,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"istio.io/istio/pkg/kube"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 )
 
 var (
-	testNackEvent = NackEvent{
+	testGateway      = types.NamespacedName{Name: "test-gw", Namespace: "default"}
+	testTypeURL      = "type.googleapis.com/agentgateway.dev.resource.Resource"
+	testErrorMessage = "test error"
+	testNackEvent    = NackEvent{
 		Gateway:   testGateway,
 		TypeUrl:   testTypeURL,
 		ErrorMsg:  testErrorMessage,
-		Timestamp: time.Now(),
-	}
-	testAckEvent = AckEvent{
-		Gateway:   testGateway,
-		TypeUrl:   testTypeURL,
 		Timestamp: time.Now(),
 	}
 )
@@ -39,7 +38,8 @@ func TestPublisher_OnNack(t *testing.T) {
 	fakeRecorder := record.NewFakeRecorder(10)
 	publisher.eventRecorder = fakeRecorder
 
-	publisher.onNack(testNackEvent)
+	// call with no resource names to keep message unchanged
+	publisher.onNack(testNackEvent, nil)
 
 	// Verify event was recorded
 	select {
@@ -50,49 +50,4 @@ func TestPublisher_OnNack(t *testing.T) {
 	default:
 		t.Fatal("Expected event to be recorded but none was found")
 	}
-}
-
-func TestPublisher_OnAck(t *testing.T) {
-	client := kube.NewFakeClient()
-	publisher := newPublisher(client)
-
-	fakeRecorder := record.NewFakeRecorder(10)
-	publisher.eventRecorder = fakeRecorder
-
-	// Call onAck
-	publisher.onAck(testAckEvent)
-
-	// Verify event was recorded
-	select {
-	case event := <-fakeRecorder.Events:
-		assert.Contains(t, event, "Normal")
-		assert.Contains(t, event, ReasonAck)
-		assert.Contains(t, event, "Configuration accepted successfully")
-	default:
-		t.Fatal("Expected event to be recorded but none was found")
-	}
-}
-
-func TestPublisher_ComputeNackID(t *testing.T) {
-	gateway1 := "default/test-gw"
-	gateway2 := "kube-system/other-gw"
-	typeURL1 := testTypeURL
-	typeURL2 := "type.googleapis.com/agentgateway.dev.workload.Address"
-
-	// Test that same inputs produce same ID
-	id1a := computeNackID(gateway1, typeURL1)
-	id1b := computeNackID(gateway1, typeURL1)
-	assert.Equal(t, id1a, id1b)
-
-	// Test that different gateways produce different IDs
-	id2 := computeNackID(gateway2, typeURL1)
-	assert.NotEqual(t, id1a, id2)
-
-	// Test that different type URLs produce different IDs
-	id3 := computeNackID(gateway1, typeURL2)
-	assert.NotEqual(t, id1a, id3)
-
-	assert.NotEmpty(t, id1a)
-	assert.NotEmpty(t, id2)
-	assert.NotEmpty(t, id3)
 }
