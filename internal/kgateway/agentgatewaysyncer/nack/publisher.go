@@ -48,12 +48,18 @@ func newPublisher(client kube.Client) *Publisher {
 // onNack publishes a NACK event as a k8s event.
 func (p *Publisher) onNack(ctx context.Context, event NackEvent) {
 	var gatewayUID, deployUID types.UID
-	if gw, err := p.client.GatewayAPI().GatewayV1().Gateways(event.Gateway.Namespace).Get(ctx, event.Gateway.Name, metav1.GetOptions{}); err == nil {
-		gatewayUID = gw.GetUID()
+	gw, err := p.client.GatewayAPI().GatewayV1().Gateways(event.Gateway.Namespace).Get(ctx, event.Gateway.Name, metav1.GetOptions{})
+	if err != nil {
+		log.Error("failed to get gateway", "error", err)
+		return
 	}
-	if dep, err := p.client.Kube().AppsV1().Deployments(event.Gateway.Namespace).Get(ctx, event.Gateway.Name, metav1.GetOptions{}); err == nil {
-		deployUID = dep.GetUID()
+	gatewayUID = gw.GetUID()
+	dep, err := p.client.Kube().AppsV1().Deployments(event.Gateway.Namespace).Get(ctx, event.Gateway.Name, metav1.GetOptions{})
+	if err != nil {
+		log.Error("failed to get deployment", "error", err)
+		return
 	}
+	deployUID = dep.GetUID()
 
 	gatewayRef := &corev1.ObjectReference{
 		Kind:       wellknown.GatewayKind,
