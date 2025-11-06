@@ -266,6 +266,7 @@ func NewAgwCollections(
 	registerGatewayAPITypes()
 	registerInferenceExtensionTypes(commoncol.Client)
 	registerKgwResources(commoncol.OurClient)
+
 	agwCollections := &AgwCollections{
 		Client:          commoncol.Client,
 		ControllerName:  agwControllerName,

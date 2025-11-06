@@ -143,14 +143,11 @@ func (s *Syncer) buildFinalGatewayStatus(
 			for _, r := range tcpRoutes {
 				counts[r.ListenerName]++
 			}
-
 			status := i.Status.DeepCopy()
-
 			for i, s := range status.Listeners {
 				s.AttachedRoutes = counts[string(s.Name)]
 				status.Listeners[i] = s
 			}
-
 			return &krt.ObjectWithStatus[*gwv1.Gateway, gwv1.GatewayStatus]{
 				Obj:    i.Obj,
 				Status: *status,

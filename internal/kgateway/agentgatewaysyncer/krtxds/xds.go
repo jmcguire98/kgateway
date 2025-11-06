@@ -523,7 +523,6 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 
 		if nackHandler != nil {
 			gateway := kgwxds.AgentgatewayID(con.node)
-			// Collect resource names from the request only (subscribe/unsubscribe/initial versions)
 			names := make([]string, 0, len(request.ResourceNamesSubscribe)+len(request.ResourceNamesUnsubscribe)+len(request.InitialResourceVersions))
 			names = append(names, request.ResourceNamesSubscribe...)
 			names = append(names, request.ResourceNamesUnsubscribe...)
@@ -594,7 +593,12 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 	// Update resource names, and record ACK if required.
 	con.proxy.UpdateWatchedResource(request.TypeUrl, func(wr *model.WatchedResource) *model.WatchedResource {
 		wr.ResourceNames, _, subChanged = deltaWatchedResources(wr.ResourceNames, request)
-
+		if !spontaneousReq {
+			// Clear last error, we got an ACK.
+			// Otherwise, this is just a change in resource subscription, so leave the last ACK info in place.
+			wr.LastError = ""
+			wr.NonceAcked = request.ResponseNonce
+		}
 		alwaysRespond = wr.AlwaysRespond
 		wr.AlwaysRespond = false
 		return wr
