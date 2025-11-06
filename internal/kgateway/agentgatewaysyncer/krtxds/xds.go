@@ -520,19 +520,13 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 
 		if nackHandler != nil {
 			gateway := kgwxds.AgentgatewayID(con.node)
-			names := make([]string, 0, len(request.ResourceNamesSubscribe)+len(request.ResourceNamesUnsubscribe)+len(request.InitialResourceVersions))
-			names = append(names, request.ResourceNamesSubscribe...)
-			names = append(names, request.ResourceNamesUnsubscribe...)
-			for n := range request.InitialResourceVersions {
-				names = append(names, n)
-			}
 			nackEvent := nack.NackEvent{
 				Gateway:   gateway,
 				TypeUrl:   request.TypeUrl,
 				ErrorMsg:  request.ErrorDetail.GetMessage(),
 				Timestamp: time.Now(),
 			}
-			nackHandler.PublishNack(&nackEvent, names)
+			nackHandler.PublishNack(&nackEvent)
 		}
 		return false
 	}

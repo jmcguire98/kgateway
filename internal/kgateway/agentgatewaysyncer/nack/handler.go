@@ -26,7 +26,6 @@ func NewNackEventPublisher(client kube.Client) *NackEventPublisher {
 }
 
 // PublishNack publishes a NACK event to the Kubernetes Event API.
-// The message will be enriched with the provided resource names (deduped and truncated).
-func (h *NackEventPublisher) PublishNack(nackEvent *NackEvent, resourceNames []string) {
-	h.nackPublisher.onNack(*nackEvent, resourceNames)
+func (h *NackEventPublisher) PublishNack(nackEvent *NackEvent) {
+	h.nackPublisher.onNack(*nackEvent)
 }

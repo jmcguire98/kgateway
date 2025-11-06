@@ -38,8 +38,7 @@ func TestPublisher_OnNack(t *testing.T) {
 	fakeRecorder := record.NewFakeRecorder(10)
 	publisher.eventRecorder = fakeRecorder
 
-	// call with no resource names to keep message unchanged
-	publisher.onNack(testNackEvent, nil)
+	publisher.onNack(testNackEvent)
 
 	// Verify event was recorded
 	select {
