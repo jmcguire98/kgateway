@@ -66,7 +66,7 @@ func NewPublisher(client kube.Client) *Publisher {
 }
 
 // PublishNack publishes a NACK event as a k8s event.
-func (p *Publisher) PublishNack(event NackEvent) {
+func (p *Publisher) PublishNack(event *NackEvent) {
 	var gatewayUID, deployUID types.UID
 	gw := p.gatewayClient.Get(event.Gateway.Name, event.Gateway.Namespace)
 	if gw == nil {

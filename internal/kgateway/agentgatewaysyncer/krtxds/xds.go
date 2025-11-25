@@ -526,7 +526,7 @@ func shouldRespondDelta(con *Connection, request *discovery.DeltaDiscoveryReques
 				ErrorMsg:  request.ErrorDetail.GetMessage(),
 				Timestamp: time.Now(),
 			}
-			nackPublisher.PublishNack(nackEvent)
+			nackPublisher.PublishNack(&nackEvent)
 		}
 		return false
 	}

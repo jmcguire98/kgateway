@@ -53,7 +53,7 @@ func TestPublisher_PublishNack(t *testing.T) {
 
 	fakeClient.WaitForCacheSync("test-publisher", ctx.Done(), publisher.HasSynced)
 
-	publisher.PublishNack(testNackEvent)
+	publisher.PublishNack(&testNackEvent)
 
 	select {
 	case event := <-fakeRecorder.Events:
