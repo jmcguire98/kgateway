@@ -26,7 +26,7 @@ var (
 	}
 )
 
-func TestPublisher_OnNack(t *testing.T) {
+func TestPublisher_PublishNack(t *testing.T) {
 	ctx := t.Context()
 
 	// Ensure involved objects exist so UID lookups succeed
