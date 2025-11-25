@@ -164,7 +164,7 @@ func Collection[T IntoProto[TT], TT proto.Message](collection krt.Collection[T],
 }
 
 // NewDiscoveryServer creates a DiscoveryServer for agentgateway that sources data from KRT collections via registered generators
-func NewDiscoveryServer(debugger *krt.DebugHandler, eventPublisher *nack.Publisher, reg ...Registration) *DiscoveryServer {
+func NewDiscoveryServer(debugger *krt.DebugHandler, nackPublisher *nack.Publisher, reg ...Registration) *DiscoveryServer {
 	out := &DiscoveryServer{
 		concurrentPushLimit: make(chan struct{}, features.PushThrottle),
 		RequestRateLimit:    rate.NewLimiter(rate.Limit(features.RequestLimit), 1),
@@ -175,7 +175,7 @@ func NewDiscoveryServer(debugger *krt.DebugHandler, eventPublisher *nack.Publish
 		debugHandlers:       map[string]string{},
 		adsClients:          map[string]*Connection{},
 		krtDebugger:         debugger,
-		nackPublisher:       eventPublisher,
+		nackPublisher:       nackPublisher,
 		DebounceOptions: DebounceOptions{
 			DebounceAfter: features.DebounceAfter,
 			DebounceMax:   features.DebounceMax,

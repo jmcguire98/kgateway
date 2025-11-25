@@ -63,7 +63,7 @@ type Syncer struct {
 	ready       atomic.Bool
 
 	// NACK handling
-	EventPublisher *nack.Publisher
+	NackPublisher *nack.Publisher
 
 	// features
 	Registrations []krtxds.Registration
@@ -86,7 +86,7 @@ func NewAgwSyncer(
 		additionalGatewayClasses: additionalGatewayClasses,
 		client:                   client,
 		statusCollections:        status.NewStatusCollections(extraGVKs),
-		EventPublisher:           nack.NewPublisher(client),
+		NackPublisher:            nack.NewPublisher(client),
 	}
 }
 
@@ -466,7 +466,7 @@ func (s *Syncer) setupSyncDependencies(
 		s.agwPlugins.HasSynced,
 		agwResources.HasSynced,
 		addresses.HasSynced,
-		s.EventPublisher.HasSynced,
+		s.NackPublisher.HasSynced,
 	}
 }
 
